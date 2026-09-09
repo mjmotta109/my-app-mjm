@@ -83,16 +83,25 @@ export function IngredientQty({
   return <Qty quantity={humanize(qtyBase, ingredient)} />;
 }
 
-/** Etiqueta de procedencia del precio. Siempre visible donde haya un precio. */
+/**
+ * Etiqueta de procedencia de UNA línea de precio.
+ *
+ * `inlineDemo={false}` en las pantallas que ya muestran un aviso de datos de
+ * demostración arriba. Repetir "Datos de demostración" en cada renglón de una
+ * lista de treinta productos no informa más: rompe el diseño de las filas y
+ * deja de leerse. La divulgación va una vez, destacada, y en cada línea se
+ * marca solo lo que SE DESVÍA de eso: un precio viejo o un precio ausente.
+ */
 export function PriceBadge({
-  confidence, isDemo,
+  confidence, isDemo, inlineDemo = true,
 }: {
   confidence: PriceConfidence | null;
   isDemo: boolean;
+  inlineDemo?: boolean;
 }): React.JSX.Element | null {
-  if (isDemo) return <span className="insignia insignia--demo">Datos de demostración</span>;
-  if (confidence === "estimated") return <span className="insignia insignia--estimado">Precio estimado</span>;
   if (confidence === null) return <span className="insignia insignia--estimado">Sin precio</span>;
+  if (confidence === "estimated") return <span className="insignia insignia--estimado">Precio estimado</span>;
+  if (isDemo && inlineDemo) return <span className="insignia insignia--demo">Datos de demostración</span>;
   return null;
 }
 
@@ -134,6 +143,16 @@ export function Notice({
   tone?: "demo" | "alerta" | "info";
 }): React.JSX.Element {
   return <div className={`aviso aviso--${tone}`}>{children}</div>;
+}
+
+/** Aviso de datos de demostración a nivel de pantalla (§26). */
+export function DemoNotice({ show }: { show: boolean }): React.JSX.Element | null {
+  if (!show) return null;
+  return (
+    <Notice tone="demo">
+      <strong>Datos de demostración.</strong> Los precios de esta pantalla no son reales.
+    </Notice>
+  );
 }
 
 export function Empty({

@@ -6,7 +6,7 @@ import {
 } from "@rinde/core";
 import { INGREDIENT_BY_ID, PRICES, RECIPES, SLOT_LABEL, getRecipe, ingredientName } from "../lib/catalog.js";
 import { useStore } from "../state/store.js";
-import { Badge, Card, Empty, Header, IngredientQty, Money, Notice, PriceBadge, Sheet } from "../components/ui.js";
+import { Badge, Card, DemoNotice, Empty, Header, IngredientQty, Money, Notice, PriceBadge, Sheet } from "../components/ui.js";
 
 /** Pantalla 5: detalle de una comida del plan (§8, §29.5). */
 export function MealDetail(): React.JSX.Element {
@@ -76,7 +76,9 @@ export function MealDetail(): React.JSX.Element {
 
         {/* ------------------------------------------------- ingredientes */}
         <section>
-          <div className="grupo-titulo"><span>Ingredientes</span><span className="tenue" style={{ textTransform: "none", letterSpacing: 0 }}>para {meal.servings}</span></div>
+          <DemoNotice show={meal.lines.some((line) => line.priceIsDemo)} />
+
+        <div className="grupo-titulo"><span>Ingredientes</span><span className="tenue" style={{ textTransform: "none", letterSpacing: 0 }}>para {meal.servings}</span></div>
           <div className="tarjeta tarjeta--plana">
             <div className="lista">
               {meal.lines.map((line) => (
@@ -90,7 +92,7 @@ export function MealDetail(): React.JSX.Element {
                   </span>
                   <span style={{ textAlign: "right", flex: "none" }}>
                     <Money value={line.valueCop} size="sm" />
-                    <div><PriceBadge confidence={line.priceConfidence} isDemo={line.priceIsDemo} /></div>
+                    <div><PriceBadge confidence={line.priceConfidence} isDemo={line.priceIsDemo} inlineDemo={false} /></div>
                   </span>
                 </div>
               ))}

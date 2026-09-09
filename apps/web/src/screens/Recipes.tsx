@@ -7,7 +7,7 @@ import {
 import type { MealSlot } from "@rinde/core";
 import { INGREDIENT_BY_ID, PRICES, RECIPES, SLOT_LABEL, getRecipe, ingredientName } from "../lib/catalog.js";
 import { useStore } from "../state/store.js";
-import { Badge, Card, Empty, Header, IngredientQty, Money, PriceBadge } from "../components/ui.js";
+import { Badge, Card, DemoNotice, Empty, Header, IngredientQty, Money, PriceBadge } from "../components/ui.js";
 
 /** Explorador de recetas (§7 "Recetas"). */
 export function RecipeList(): React.JSX.Element {
@@ -144,6 +144,8 @@ export function RecipeDetail(): React.JSX.Element {
           </p>
         </Card>
 
+        <DemoNotice show={costed.lines.some((line) => line.priceIsDemo)} />
+
         <section>
           <div className="grupo-titulo"><span>Ingredientes</span></div>
           <div className="tarjeta tarjeta--plana">
@@ -159,7 +161,7 @@ export function RecipeDetail(): React.JSX.Element {
                   </span>
                   <span style={{ textAlign: "right", flex: "none" }}>
                     <Money value={line.valueCop} size="sm" />
-                    <div><PriceBadge confidence={line.priceConfidence} isDemo={line.priceIsDemo} /></div>
+                    <div><PriceBadge confidence={line.priceConfidence} isDemo={line.priceIsDemo} inlineDemo={false} /></div>
                   </span>
                 </div>
               ))}

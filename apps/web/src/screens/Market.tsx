@@ -79,6 +79,15 @@ export function Market(): React.JSX.Element {
           <p className="diminuto tenue" style={{ marginTop: 8 }}>
             {items.length} productos · {comprados} marcados
           </p>
+          {ciclo === 1 && cycleCount(plan) > 1 && (
+            /* Sin esta aclaración, "Semana 1" se lee como el gasto semanal,
+               cuando en realidad incluye la despensa seca de todo el mes. */
+            <p className="pequeno" style={{ marginTop: 10 }}>
+              Esta primera compra incluye <strong>todo lo que no se daña</strong> —arroz, granos,
+              aceite, latas— para el mes completo. Las siguientes semanas son solo lo fresco, y
+              son bastante más baratas.
+            </p>
+          )}
         </div>
 
         {lista.containsDemoPrices && (
@@ -140,7 +149,7 @@ export function Market(): React.JSX.Element {
                         </span>
                         <span style={{ textAlign: "right", flex: "none" }}>
                           <Money value={item.lineCostCop} size="sm" />
-                          <div><PriceBadge confidence={item.priceConfidence} isDemo={item.priceIsDemo} /></div>
+                          <div><PriceBadge confidence={item.priceConfidence} isDemo={item.priceIsDemo} inlineDemo={false} /></div>
                         </span>
                       </button>
                     );
