@@ -1,0 +1,30 @@
+{
+  "name": "rinde",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rinde — Tu presupuesto. Tu despensa. Tu mes.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build -w @rinde/core && npm run build -w @rinde/data && npm run build -w @rinde/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b --pretty false",
+    "dev:web": "npm run dev -w @rinde/web",
+    "dev:api": "npm run dev -w @rinde/api",
+    "seed:api": "npm run seed -w @rinde/api",
+    "e2e": "node apps/web/e2e/smoke.mjs",
+    "build:api": "npm run build -w @rinde/api"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "playwright": "^1.63.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
