@@ -106,9 +106,16 @@ export function balanceScore(
   consumedToday: Nutrition,
   eaters: number,
   slotsPerDay: number,
+  /**
+   * Metas por comida del hogar. Si se omite, se usa la referencia genérica
+   * escalada por comensales — el comportamiento de siempre.
+   */
+  mealTargets?: { kcal: number; proteinG: number },
 ): number {
-  const targetKcal = (DAILY_REFERENCE.kcal * eaters) / Math.max(1, slotsPerDay);
-  const targetProtein = (DAILY_REFERENCE.proteinG * eaters) / Math.max(1, slotsPerDay);
+  const targetKcal =
+    mealTargets?.kcal ?? (DAILY_REFERENCE.kcal * eaters) / Math.max(1, slotsPerDay);
+  const targetProtein =
+    mealTargets?.proteinG ?? (DAILY_REFERENCE.proteinG * eaters) / Math.max(1, slotsPerDay);
 
   const kcalRatio = clamp01(contribution.kcal / Math.max(1, targetKcal));
   const proteinRatio = clamp01(contribution.proteinG / Math.max(1, targetProtein));
@@ -117,9 +124,10 @@ export function balanceScore(
   // Se premia acercarse al objetivo, no superarlo: una comida con el triple de
   // calorías de las que tocan no es "mejor".
   const kcalFit = 1 - Math.abs(kcalRatio - 1);
-  const dayProteinDeficit = clamp01(
-    1 - consumedToday.proteinG / Math.max(1, DAILY_REFERENCE.proteinG * eaters),
-  );
+  // El déficit del día se mide contra la meta DIARIA del hogar, que es la meta
+  // por comida multiplicada por las comidas del día.
+  const dayProteinTarget = targetProtein * Math.max(1, slotsPerDay);
+  const dayProteinDeficit = clamp01(1 - consumedToday.proteinG / Math.max(1, dayProteinTarget));
 
   return clamp01(0.45 * kcalFit + 0.4 * proteinRatio * dayProteinDeficit + 0.15 * fiberRatio);
 }

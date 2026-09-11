@@ -1,5 +1,8 @@
 import type {
+  CookingTimeBudget,
   Cop,
+  MealPrepPreference,
+  Difficulty,
   Household,
   Ingredient,
   InventoryItem,
@@ -15,8 +18,9 @@ import { VirtualPantry, expiryUrgency, planPurchase } from "./inventory.js";
 import { costMeal } from "./costing.js";
 import { DEFAULT_CHILD_FACTOR, eaterEquivalents, scaleRecipe, type ScaleResult } from "./scaling.js";
 import { addNutrition, balanceScore, nutritionOfScaled, zeroNutrition } from "./nutrition.js";
+import { householdNeeds, perMealTargets } from "./nutrition-needs.js";
 import { substituteExpensive } from "./substitutions.js";
-import { addDays } from "./dates.js";
+import { addDays, dayOfWeek } from "./dates.js";
 import { mulberry32, seedFrom } from "./random.js";
 import { splitEvenly } from "./money.js";
 import { round } from "./units.js";
@@ -53,17 +57,23 @@ export interface ScoringWeights {
   reuse: number;
   /** Gastar antes lo que vence antes. */
   expiry: number;
+  /** Caber en el tiempo que el hogar tiene para cocinar ese día. */
+  time: number;
 }
 
 export const DEFAULT_WEIGHTS: ScoringWeights = {
-  budget: 0.3,
-  inventory: 0.2,
-  variety: 0.18,
-  waste: 0.12,
-  nutrition: 0.1,
+  budget: 0.26,
+  inventory: 0.17,
+  variety: 0.16,
+  time: 0.12,
+  waste: 0.1,
+  nutrition: 0.09,
   reuse: 0.06,
   expiry: 0.04,
 };
+
+/** Orden de menor a mayor exigencia, para comparar dificultades. */
+const DIFFICULTY_RANK: Record<Difficulty, number> = { facil: 0, media: 1, dificil: 2 };
 
 export interface PlanRequest {
   household: Household;
@@ -93,6 +103,8 @@ interface Attempt {
   unpriced: Set<string>;
   substitutionsApplied: number;
   pressure: number;
+  /** Comidas que no cupieron en el tiempo declarado por el hogar. */
+  overTimeMeals: number;
 }
 
 /** Presiones de presupuesto que se intentan, en orden, hasta caber. */
@@ -188,6 +200,12 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
         "no hay suficientes recetas compatibles con las preferencias del hogar.",
     );
   }
+  if (chosen.overTimeMeals > 0) {
+    warnings.push(
+      `${chosen.overTimeMeals} comida(s) no caben en el tiempo de cocina que declaraste. ` +
+        "No hay recetas compatibles más rápidas para ese momento del día.",
+    );
+  }
   if (prices.containsDemo()) {
     warnings.push("El plan usa precios de demostración. No son precios reales de mercado.");
   }
@@ -199,6 +217,7 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
     mealsPlanned: chosen.meals.length,
     mealsRequested,
     distinctRecipes: new Set(chosen.meals.map((m) => m.recipeId)).size,
+    mealsOverTimeBudget: chosen.overTimeMeals,
     repairSteps,
     warnings,
   };
@@ -278,19 +297,33 @@ function runAttempt(args: AttemptArgs): Attempt {
   const unpriced = new Set<string>();
   const lastUsedAt = new Map<string, number>();
   const useCount = new Map<string, number>();
+  /** Veces que se usó cada receta dentro de la ventana de cocina actual. */
+  let useInWindow = new Map<string, number>();
+  /** Recetas ya usadas HOY: una tanda se reparte entre días, no dentro del día. */
+  let usedToday = new Set<string>();
+  const mealPrep = household.mealPrep?.enabled ? household.mealPrep : null;
+  const windowDays = Math.max(1, mealPrep?.windowDays ?? 7);
   const inPlay = new Set<string>();
   for (const item of request.inventory) inPlay.add(item.ingredientId);
 
   const totalMeals = household.days * household.slots.length;
   const varietyWindow = Math.min(14, Math.max(3, totalMeals));
+  // Metas del hogar: del perfil físico si lo hay, o de la referencia genérica.
+  const mealTargets = perMealTargets(householdNeeds(household), household.slots.length);
   let mealIndex = 0;
   let spentSoFar = 0;
   let totalValue = 0;
+  /** Comidas que no cupieron en el tiempo declarado. Se reporta, no se esconde. */
+  let overTimeMeals = 0;
   let consumedToday = zeroNutrition();
 
   for (let day = 0; day < household.days; day++) {
     const date = addDays(startDate, day);
     consumedToday = zeroNutrition();
+    // Al abrir una ventana nueva se empieza de cero: las tandas se agrupan
+    // dentro de la semana, no entre semanas.
+    if (mealPrep && day % windowDays === 0) useInWindow = new Map();
+    usedToday = new Set();
 
     for (const slot of household.slots) {
       const candidates = bySlot.get(slot) ?? [];
@@ -298,6 +331,10 @@ function runAttempt(args: AttemptArgs): Attempt {
         mealIndex++;
         continue;
       }
+
+      // Cuánto tiempo hay para cocinar ESTA comida, este día.
+      const timeLimit = minutesAvailable(household.cookingTime, date, slot);
+      const difficultyCap = maxDifficultyFor(household.cookingTime, date);
 
       const remainingMeals = Math.max(1, totalMeals - mealIndex);
       const targetBudget = household.budgetCop * BUDGET_UTILIZATION;
@@ -317,6 +354,8 @@ function runAttempt(args: AttemptArgs): Attempt {
 
       let chosen: { candidate: Candidate; score: number } | null = null;
       let fallback: { candidate: Candidate; score: number; cost: number } | null = null;
+      /** La más rápida entre las que NO caben en el tiempo, por si no hay otra. */
+      let quickest: { candidate: Candidate; score: number } | null = null;
 
       for (const { candidate, simulated } of simulations) {
         const score = scoreCandidate({
@@ -326,6 +365,9 @@ function runAttempt(args: AttemptArgs): Attempt {
           catalog,
           weights,
           targetPerMeal,
+          timeLimit,
+          difficultyCap,
+          mealTargets,
           mealIndex,
           varietyWindow,
           lastUsedAt,
@@ -334,6 +376,9 @@ function runAttempt(args: AttemptArgs): Attempt {
           eaters,
           slotsPerDay: household.slots.length,
           consumedToday,
+          mealPrep,
+          useInWindow,
+          usedToday,
           softExcluded: args.softExcluded,
           date,
           totalMeals,
@@ -348,13 +393,32 @@ function runAttempt(args: AttemptArgs): Attempt {
         ) {
           fallback = { candidate, score: jittered, cost: simulated.purchaseCop };
         }
+        // El tiempo es un límite real, no una preferencia: una receta de 90
+        // minutos no entra en un martes de 25, por buena que sea en todo lo
+        // demás. Si NINGUNA cabe, abajo se toma la más rápida disponible en vez
+        // de dejar la comida sin planificar.
+        if (timeLimit !== null && candidate.recipe.minutes > timeLimit) {
+          if (
+            !quickest ||
+            candidate.recipe.minutes < quickest.candidate.recipe.minutes ||
+            (candidate.recipe.minutes === quickest.candidate.recipe.minutes &&
+              jittered > quickest.score)
+          ) {
+            quickest = { candidate, score: jittered };
+          }
+          continue;
+        }
         if (pressure > 0 && simulated.purchaseCop > costCap) continue;
         if (!chosen || jittered > chosen.score) chosen = { candidate, score: jittered };
       }
 
-      // Si el techo dejó fuera a todas, se toma la más barata posible en vez
-      // de dejar la comida sin planificar.
-      const winner = chosen?.candidate ?? fallback?.candidate;
+      // Si los topes dejaron fuera a todas, se toma la mejor alternativa posible
+      // en vez de dejar la comida sin planificar: primero la más rápida entre
+      // las que se pasaron de tiempo, y si no, la más barata.
+      const winner = chosen?.candidate ?? quickest?.candidate ?? fallback?.candidate;
+      if (!chosen && quickest && timeLimit !== null) {
+        overTimeMeals++;
+      }
       if (!winner) {
         mealIndex++;
         continue;
@@ -381,6 +445,8 @@ function runAttempt(args: AttemptArgs): Attempt {
       consumedToday = addNutrition(consumedToday, nutritionOfScaled(winner.scale, catalog));
       lastUsedAt.set(winner.recipe.id, mealIndex);
       useCount.set(winner.recipe.id, (useCount.get(winner.recipe.id) ?? 0) + 1);
+      useInWindow.set(winner.recipe.id, (useInWindow.get(winner.recipe.id) ?? 0) + 1);
+      usedToday.add(winner.recipe.id);
       spentSoFar += costed.purchaseCop;
       totalValue += costed.costCop;
       mealIndex++;
@@ -399,6 +465,7 @@ function runAttempt(args: AttemptArgs): Attempt {
     unpriced,
     substitutionsApplied,
     pressure,
+    overTimeMeals,
   };
 }
 
@@ -414,6 +481,12 @@ interface ScoreArgs {
   weights: ScoringWeights;
   /** Cuánto puede costar esta comida para que el presupuesto llegue al final. */
   targetPerMeal: number;
+  /** Minutos disponibles para cocinar esta comida. `null` = sin límite. */
+  timeLimit: number | null;
+  /** Dificultad máxima aceptable este día. `null` = cualquiera. */
+  difficultyCap: Difficulty | null;
+  /** Metas nutricionales por comida, del hogar. */
+  mealTargets: { kcal: number; proteinG: number };
   mealIndex: number;
   varietyWindow: number;
   lastUsedAt: Map<string, number>;
@@ -422,6 +495,12 @@ interface ScoreArgs {
   eaters: number;
   slotsPerDay: number;
   consumedToday: ReturnType<typeof zeroNutrition>;
+  /** Preferencia de cocina por tandas, o `null` si está apagada. */
+  mealPrep: MealPrepPreference | null;
+  /** Veces que cada receta ya salió en la ventana de cocina actual. */
+  useInWindow: ReadonlyMap<string, number>;
+  /** Recetas ya servidas hoy. */
+  usedToday: ReadonlySet<string>;
   softExcluded: Set<string>;
   date: IsoDate;
   totalMeals: number;
@@ -448,14 +527,37 @@ function scoreCandidate(args: ScoreArgs): number {
   // 3. Variedad: cuánto hace que no se cocina y cuántas veces ya salió.
   const lastUsed = args.lastUsedAt.get(candidate.recipe.id);
   const recency = lastUsed === undefined ? 1 : clamp01((args.mealIndex - lastUsed) / args.varietyWindow);
-  const maxRepeats = Math.max(2, Math.ceil(args.totalMeals / Math.max(1, args.distinctCandidates)));
+  // En modo tandas cada receta se usa `batchSize` veces por semana a
+  // propósito, así que el cupo total se multiplica igual: si no, la primera
+  // tanda agotaría el cupo y el mes entero se resolvería con cuatro recetas.
+  const batchFactor = args.mealPrep ? Math.max(1, args.mealPrep.batchSize) : 1;
+  const maxRepeats =
+    Math.max(2, Math.ceil(args.totalMeals / Math.max(1, args.distinctCandidates))) * batchFactor;
   const repeatScore = clamp01(1 - (args.useCount.get(candidate.recipe.id) ?? 0) / maxRepeats);
-  let varietyScore = 0.65 * recency + 0.35 * repeatScore;
-  // Repetir el mismo plato con menos de dos días de diferencia hunde la
-  // puntuación: sin esto, el plato más barato del catálogo se apodera de un
-  // horario completo y el mes entero sabe igual.
-  if (lastUsed !== undefined && args.mealIndex - lastUsed < args.slotsPerDay * 2) {
-    varietyScore *= REPEAT_DAMPING;
+  let varietyScore: number;
+  if (args.mealPrep) {
+    // En modo "cocinar por adelantado" la lógica se INVIERTE dentro de la
+    // semana: repetir un plato es exactamente lo que hace que la tanda valga la
+    // pena. Se premia completar una tanda ya empezada y, una vez completa, se
+    // pasa a otra receta. La variedad se conserva ENTRE semanas, no dentro.
+    const enVentana = args.useInWindow.get(candidate.recipe.id) ?? 0;
+    const cupo = Math.max(1, args.mealPrep.batchSize);
+    // Abrir una tanda nueva: se sigue premiando la variedad ENTRE semanas, para
+    // que el mes no se resuelva con cuatro recetas repetidas sin parar.
+    if (enVentana === 0) varietyScore = (0.4 + 0.6 * recency) * repeatScore;
+    else if (enVentana < cupo) varietyScore = 1;
+    else varietyScore = 0.05;
+    // Cocinar una vez y comerlo tres días es el punto. Comerlo de almuerzo y
+    // otra vez de cena el MISMO día no: eso no ahorra una olla, solo cansa.
+    if (args.usedToday.has(candidate.recipe.id)) varietyScore *= 0.15;
+  } else {
+    varietyScore = 0.65 * recency + 0.35 * repeatScore;
+    // Repetir el mismo plato con menos de dos días de diferencia hunde la
+    // puntuación: sin esto, el plato más barato del catálogo se apodera de un
+    // horario completo y el mes entero sabe igual.
+    if (lastUsed !== undefined && args.mealIndex - lastUsed < args.slotsPerDay * 2) {
+      varietyScore *= REPEAT_DAMPING;
+    }
   }
 
   // 4. Desperdicio: comprar un perecedero nuevo para usar solo una parte.
@@ -474,9 +576,16 @@ function scoreCandidate(args: ScoreArgs): number {
   }
   const wasteScore = wasteLines === 0 ? 1 : clamp01(1 - wastePenalty / wasteLines);
 
-  // 5. Nutrición: qué tanto ayuda a equilibrar el día.
+  // 5. Nutrición: qué tanto ayuda a equilibrar el día contra las metas del
+  // hogar (del perfil físico si existe, o de la referencia genérica).
   const nutrition = nutritionOfScaled(candidate.scale, args.catalog);
-  const nutritionScore = balanceScore(nutrition, args.consumedToday, args.eaters, args.slotsPerDay);
+  const nutritionScore = balanceScore(
+    nutrition,
+    args.consumedToday,
+    args.eaters,
+    args.slotsPerDay,
+    args.mealTargets,
+  );
 
   // 6. Reutilización: preferir ingredientes que ya están en el plan.
   const realLines = simulated.lines.length;
@@ -492,14 +601,26 @@ function scoreCandidate(args: ScoreArgs): number {
     if (value > expiryScore) expiryScore = value;
   }
 
+  // 8. Tiempo: caber holgado en los minutos que hay para cocinar ese día.
+  //
+  // Un martes con 25 minutos no es el día del sancocho. Se premia lo que cabe
+  // con margen; pasarse cae a cero, y una receta más exigente de lo que el
+  // hogar quiere manejar entre semana pierde terreno aunque quepa en tiempo.
+  const timeScore = scoreTime(candidate.recipe, args.timeLimit, args.difficultyCap);
+
   let score =
     weights.budget * budgetScore +
     weights.inventory * inventoryScore +
     weights.variety * varietyScore +
+    weights.time * timeScore +
     weights.waste * wasteScore +
     weights.nutrition * nutritionScore +
     weights.reuse * reuseScore +
     weights.expiry * expiryScore;
+
+  // Cocinar por adelantado algo que solo sirve recién hecho no tiene sentido.
+  // No se prohíbe (un desayuno de huevo tiene que poder salir igual): se hunde.
+  if (args.mealPrep && !candidate.recipe.prep.batchFriendly) score *= 0.5;
 
   // Rechazos blandos: no se prohíbe la receta, se hunde su puntuación.
   for (const line of candidate.scale.lines) {
@@ -577,6 +698,57 @@ function mapToList(map: Map<string, number>): { ingredientId: string; qtyBase: n
   return [...map.entries()]
     .map(([ingredientId, qtyBase]) => ({ ingredientId, qtyBase: round(qtyBase, 3) }))
     .sort((a, b) => (a.ingredientId < b.ingredientId ? -1 : 1));
+}
+
+/**
+ * Minutos disponibles para una comida concreta.
+ *
+ * `null` significa "sin límite", que es como se comporta un hogar que no
+ * declaró tiempos — exactamente igual que antes de que existiera esta función.
+ */
+export function minutesAvailable(
+  budget: CookingTimeBudget | undefined,
+  date: IsoDate,
+  slot: MealSlot,
+): number | null {
+  if (!budget) return null;
+  const day = dayOfWeek(date);
+  const isWeekend = day === 0 || day === 6;
+  const table = isWeekend ? budget.weekend : budget.weekday;
+  const minutes = table[slot];
+  return typeof minutes === "number" && minutes > 0 ? minutes : null;
+}
+
+/** Dificultad máxima aceptable ese día. El fin de semana no se limita. */
+export function maxDifficultyFor(
+  budget: CookingTimeBudget | undefined,
+  date: IsoDate,
+): Difficulty | null {
+  if (!budget) return null;
+  const day = dayOfWeek(date);
+  if (day === 0 || day === 6) return null;
+  return budget.maxWeekdayDifficulty;
+}
+
+function scoreTime(
+  recipe: Recipe,
+  timeLimit: number | null,
+  difficultyCap: Difficulty | null,
+): number {
+  let score = 1;
+
+  if (timeLimit !== null) {
+    if (recipe.minutes > timeLimit) return 0;
+    // Dentro del límite, mejor cuanto más margen deje: a 20 de 30 minutos
+    // queda holgura real para un martes.
+    score = 0.6 + 0.4 * (1 - recipe.minutes / timeLimit);
+  }
+
+  if (difficultyCap !== null) {
+    const over = DIFFICULTY_RANK[recipe.difficulty] - DIFFICULTY_RANK[difficultyCap];
+    if (over > 0) score *= over >= 2 ? 0.2 : 0.45;
+  }
+  return clamp01(score);
 }
 
 function clamp01(value: number): number {

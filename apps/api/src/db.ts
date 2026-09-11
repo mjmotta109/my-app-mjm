@@ -36,7 +36,12 @@ CREATE TABLE IF NOT EXISTS household (
   created_on     TEXT    NOT NULL,
   -- Nulo mientras el hogar sea anónimo. Cuando llegue Google Sign-In, el
   -- hogar se "reclama" escribiendo aquí: no hace falta migrar datos.
-  owner_user_id  TEXT
+  owner_user_id  TEXT,
+  -- JSON. Nulos cuando el hogar no los ha configurado, que es lo normal:
+  -- Rinde planifica sin límite de tiempo y sin datos físicos de nadie.
+  cooking_time       TEXT,
+  meal_prep          TEXT,
+  nutrition_profiles TEXT
 );
 
 CREATE TABLE IF NOT EXISTS inventory_item (
@@ -118,9 +123,31 @@ CREATE TABLE IF NOT EXISTS price_update (
 );
 `;
 
+/**
+ * Columnas añadidas después de la primera versión del esquema.
+ *
+ * `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, así que una
+ * base creada antes se quedaría sin estas columnas y las escrituras fallarían
+ * en silencio. Se añaden aquí, comprobando primero si ya están.
+ */
+const MIGRATIONS: { table: string; column: string; definition: string }[] = [
+  { table: "household", column: "cooking_time", definition: "TEXT" },
+  { table: "household", column: "meal_prep", definition: "TEXT" },
+  { table: "household", column: "nutrition_profiles", definition: "TEXT" },
+];
+
+function migrate(db: Db): void {
+  for (const { table, column, definition } of MIGRATIONS) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (columns.some((entry) => entry.name === column)) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export function openDb(file: string): Db {
   if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
   const db = new Database(file);
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }

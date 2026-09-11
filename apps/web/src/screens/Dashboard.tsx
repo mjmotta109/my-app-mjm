@@ -167,6 +167,19 @@ export function Dashboard(): React.JSX.Element {
           </span>
         </Link>
 
+        <Link to="/cocinar-adelantado" className="tarjeta-boton">
+          <span aria-hidden="true" style={{ fontSize: 22 }}>🍲</span>
+          <span className="crecer">
+            <strong>Cocinar por adelantado</strong>
+            <div className="pequeno tenue">
+              {household.mealPrep?.enabled
+                ? "Tu plan está armado por tandas"
+                : "Cocina dos veces y resuelve la semana"}
+            </div>
+          </span>
+          <span className="tenue" aria-hidden="true">›</span>
+        </Link>
+
         <Link to="/que-puedo-cocinar" className="tarjeta-boton">
           <span aria-hidden="true" style={{ fontSize: 22 }}>🍳</span>
           <span className="crecer">

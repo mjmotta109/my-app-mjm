@@ -74,23 +74,36 @@ await step("2 adultos, 30 días", async () => {
   await shot("04-comidas");
 });
 
-await step("comidas → despensa", async () => {
+await step("comidas → tiempo de cocina", async () => {
+  await page.getByRole("button", { name: "Continuar" }).click();
+  await page.getByText("¿Cuánto tiempo tienes para cocinar?").waitFor();
+  await shot("05-tiempo-cocina");
+});
+
+await step("elegir 'Siempre corriendo' y activar cocinar por adelantado", async () => {
+  await page.getByRole("button", { name: /Siempre corriendo/ }).click();
+  await page.getByRole("button", { name: /Quiero cocinar por adelantado/ }).click();
+  await page.getByText(/mismo plato hasta tres veces/).waitFor();
+  await shot("05b-tandas");
+});
+
+await step("tiempo → despensa", async () => {
   await page.getByRole("button", { name: "Continuar" }).click();
   await page.getByText("¿Qué tienes en casa?").waitFor();
-  await shot("05-despensa-onboarding");
+  await shot("06-despensa-onboarding");
 });
 
 await step("texto libre: 'un poquito de pollo, unas papas y tres tomates'", async () => {
   await page.getByLabel("Escríbelo como lo dirías").fill("Tengo un poquito de pollo, unas papas y tres tomates");
   await page.getByRole("button", { name: "Agregar lo que escribí" }).click();
   await page.getByText("No dijiste cuánto").first().waitFor();
-  await shot("06-nlp-pregunta-cantidad");
+  await shot("07-nlp-pregunta-cantidad");
 });
 
 await step("confirmar cantidades vagas", async () => {
   await page.getByLabel("Cantidad de Pechuga de pollo en g").fill("1000");
   await page.getByLabel("Cantidad de Papa pastusa en g").fill("500");
-  await shot("07-cantidades-confirmadas");
+  await shot("07b-cantidades-confirmadas");
 });
 
 await step("agregar básicos y crear plan", async () => {
@@ -112,10 +125,44 @@ await step("el dashboard muestra presupuesto y gasto proyectado", async () => {
   if (!texto.includes("datos de demostración")) throw new Error("no advierte que los precios son demo");
 });
 
+await step("el plan respeta el tiempo de cocina declarado", async () => {
+  const texto = (await page.locator(".contenido").innerText()).toLowerCase();
+  if (texto.includes("no caben en el tiempo")) {
+    throw new Error("el plan dejó comidas fuera del tiempo declarado");
+  }
+});
+
+await step("cocinar por adelantado: hay tandas y ahorro de tiempo", async () => {
+  await page.getByRole("link", { name: /Cocinar por adelantado/ }).click();
+  await page.getByRole("heading", { name: "Cocinar por adelantado" }).waitFor();
+  const texto = (await page.locator(".contenido").innerText()).toLowerCase();
+  for (const esperado of ["tiempo de cocina esta semana", "jornada", "consumir antes del"]) {
+    if (!texto.includes(esperado)) throw new Error(`falta "${esperado}" en meal prep`);
+  }
+  if (!/−\d+ min/.test(await page.locator(".contenido").innerText())) {
+    throw new Error("no muestra ahorro de tiempo");
+  }
+  await shot("09-meal-prep");
+});
+
+await step("ejecutar una tanda la marca como cocinada", async () => {
+  const boton = page.getByRole("button", { name: "Ya la cociné" }).first();
+  await boton.click();
+  await page.getByText("✓ Cocinada").first().waitFor();
+  await shot("10-tanda-cocinada");
+});
+
+await step("ver qué necesito para una tanda", async () => {
+  await page.getByRole("button", { name: "Ver qué necesito" }).first().click();
+  await page.getByText(/Cantidades para las/).waitFor();
+  await shot("11-tanda-ingredientes");
+  await page.locator(".hoja__panel .boton-icono").click();
+});
+
 await step("plan mensual", async () => {
   await page.getByRole("link", { name: /Plan/ }).first().click();
   await page.getByRole("heading", { name: "Plan" }).waitFor();
-  await shot("09-plan");
+  await shot("12-plan");
 });
 
 await step("detalle de comida", async () => {
@@ -125,13 +172,13 @@ await step("detalle de comida", async () => {
   for (const esperado of ["costo estimado", "por persona", "ingredientes", "nutrición", "estimada"]) {
     if (!texto.includes(esperado)) throw new Error(`falta "${esperado}" en el detalle`);
   }
-  await shot("10-comida");
+  await shot("13-comida");
 });
 
 await step("cocinar descuenta inventario", async () => {
   await page.getByRole("button", { name: /Lo cociné/ }).click();
   await page.getByText("Listo, inventario actualizado").waitFor();
-  await shot("11-cocinado");
+  await shot("14-cocinado");
   await page.getByRole("button", { name: "Cerrar", exact: true }).click();
 });
 
@@ -141,60 +188,94 @@ await step("mercado", async () => {
   const texto = (await page.locator(".contenido").innerText()).toLowerCase();
   if (!texto.includes("total de esta compra")) throw new Error("falta el total");
   if (!texto.includes("proteínas") && !texto.includes("granos")) throw new Error("no agrupa por categoría");
-  await shot("12-mercado");
+  await shot("15-mercado");
 });
 
 await step("marcar un producto como comprado", async () => {
   const primero = page.locator(".lista__item").first();
   await primero.click();
   if ((await primero.getAttribute("aria-pressed")) !== "true") throw new Error("no quedó marcado");
-  await shot("13-mercado-marcado");
+  await shot("16-mercado-marcado");
 });
 
 await step("despensa", async () => {
   await page.getByRole("link", { name: /Despensa/ }).first().click();
   await page.getByRole("heading", { name: "Mi despensa" }).waitFor();
-  await shot("14-despensa");
+  await shot("17-despensa");
 });
 
 await step("¿qué puedo cocinar?", async () => {
   await page.getByRole("link", { name: /¿Qué puedo cocinar con esto\?/ }).click();
   await page.getByRole("heading", { name: "¿Qué puedo cocinar?" }).waitFor();
-  await shot("15-que-puedo-cocinar");
+  await shot("18-que-puedo-cocinar");
 });
 
-await step("recetas", async () => {
+await step("recetas muestran tiempo y dificultad y se pueden filtrar", async () => {
   await page.getByRole("link", { name: /Recetas/ }).first().click();
   await page.getByRole("heading", { name: "Recetas" }).waitFor();
+  const texto = await page.locator(".contenido").innerText();
+  if (!/⏱ \d+ min/.test(texto)) throw new Error("el índice no muestra el tiempo");
+  if (!/(Fácil|Media|Difícil)/.test(texto)) throw new Error("el índice no muestra la dificultad");
+
+  await page.getByRole("button", { name: "≤ 15 min" }).click();
+  await page.waitForTimeout(250);
+  const tiempos = await page.locator(".lista__item .insignia").allInnerTexts();
+  for (const t of tiempos.filter((x) => x.includes("min"))) {
+    const min = Number(t.replace(/\D/g, ""));
+    if (min > 15) throw new Error(`el filtro dejó pasar una receta de ${min} min`);
+  }
+  await shot("19-recetas");
+
+  await page.getByRole("button", { name: "≤ 15 min" }).click();
   await page.getByLabel("Buscar receta").fill("lenteja");
   await page.waitForTimeout(200);
-  await shot("16-recetas");
 });
 
 await step("perfil", async () => {
   await page.getByRole("link", { name: /Perfil/ }).first().click();
   await page.getByRole("heading", { name: "Perfil" }).waitFor();
-  await shot("17-perfil");
+  await shot("20-perfil");
 });
 
 await step("panel de precios explica la procedencia", async () => {
   await page.getByRole("button", { name: /Origen de los precios/ }).click();
   await page.getByText("¿Por qué no hay precios reales?").waitFor();
-  await shot("18-precios");
+  await shot("21-precios");
   await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+});
+
+await step("estado físico estima necesidades y advierte que es opcional", async () => {
+  await page.goto(`${BASE}/#/estado-fisico`);
+  await page.getByRole("heading", { name: "Estado físico" }).waitFor();
+  let texto = (await page.locator(".contenido").innerText()).toLowerCase();
+  if (!texto.includes("esto es opcional")) throw new Error("no dice que es opcional");
+  if (!texto.includes("referencia genérica")) throw new Error("no marca la referencia genérica");
+
+  await page.getByRole("button", { name: "+ Adulto" }).click();
+  await page.getByLabel("Edad").fill("34");
+  await page.getByLabel("Peso").fill("62");
+  await page.getByLabel("Estatura").fill("163");
+  await page.getByRole("button", { name: "Femenino", exact: true }).click();
+  await page.getByRole("button", { name: /Moderado/ }).click();
+  await page.waitForTimeout(300);
+
+  texto = await page.locator(".contenido").innerText();
+  if (!texto.includes("Mifflin-St Jeor")) throw new Error("no explica en qué se basa la estimación");
+  if (!/no es una herramienta médica/i.test(texto)) throw new Error("falta la advertencia médica");
+  await shot("23-estado-fisico");
 });
 
 await step("rinde más", async () => {
   await page.goto(`${BASE}/#/rinde-mas`);
   await page.getByRole("heading", { name: "Rinde más" }).waitFor();
   await page.waitForTimeout(400);
-  await shot("19-rinde-mas");
+  await shot("22-rinde-mas");
 });
 
 await step("el estado sobrevive a recargar (persistencia local)", async () => {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.getByText("Mi mes").waitFor({ timeout: 8000 });
-  await shot("20-persistencia");
+  await shot("24-persistencia");
 });
 
 await step("manifest e iconos disponibles", async () => {

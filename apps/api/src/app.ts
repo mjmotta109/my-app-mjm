@@ -1,13 +1,15 @@
 import Fastify from "fastify";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
-  PriceIndex, buildShoppingList, cookMeal, cycleCount, generateMealPlan, parsePriceCsv,
-  rindeMas, weeklyPriceUpdate, whatCanICook, eaterEquivalents, validateObservations,
+  PriceIndex, buildShoppingList, cookBatch, cookMeal, cycleCount, generateMealPlan,
+  householdNeeds, parsePriceCsv, planMealPrep, rindeMas, sessionIngredients,
+  weeklyPriceUpdate, whatCanICook, eaterEquivalents, validateObservations,
 } from "@rinde/core";
 import type {
   Household, IngredientPrice, InventoryItem, MealSlot, PriceObservation, UserPreference,
 } from "@rinde/core";
 import { CATEGORIES, INGREDIENTS, INGREDIENT_BY_ID, RECIPES, RECIPE_BY_ID } from "@rinde/data";
+import { addDays } from "@rinde/core";
 import type { Repository } from "./repository.js";
 
 /**
@@ -358,6 +360,113 @@ export function buildApp(options: AppOptions): FastifyInstance {
           ...(body.slot ? { slot: body.slot } : {}),
         },
       ),
+    };
+  });
+
+  // ------------------------------------------------------ cocinar por adelantado
+
+  /**
+   * Jornadas de cocina para una ventana del plan.
+   *
+   * Agrupa las comidas que usan la misma receta en una sola tanda y dice qué
+   * día cocinarla, cuánto rinde, cómo guardarla y hasta cuándo aguanta. Lo que
+   * no se puede adelantar sale aparte, con la razón.
+   */
+  app.get("/households/:id/meal-prep", async (request, reply) => {
+    const household = requireHousehold(request, reply);
+    if (!household) return reply;
+    const plan = repository.getCurrentPlan(household.id);
+    if (!plan) return reply.code(404).send({ error: "no_plan" });
+
+    const query = request.query as { week?: string; days?: string };
+    const week = Math.max(1, Number(query.week ?? 1) || 1);
+    const days = Math.max(1, Number(query.days ?? 7) || 7);
+    const prep = planMealPrep(plan, RECIPE_BY_ID, {
+      from: addDays(plan.startDate, (week - 1) * days),
+      days,
+    });
+
+    return {
+      week,
+      batchModeEnabled: household.mealPrep?.enabled ?? false,
+      prep,
+      // Todo lo que hay que tener a mano antes de encender la estufa.
+      shoppingBySession: prep.sessions.map((session) => ({
+        date: session.date,
+        ingredients: sessionIngredients(session, INGREDIENT_BY_ID),
+      })),
+    };
+  });
+
+  /**
+   * Cocinar una tanda completa.
+   *
+   * Descuenta el inventario UNA vez y deja resueltas todas las comidas que la
+   * tanda cubre. Descontarlas después una por una descontaría de más.
+   */
+  app.post("/households/:id/meal-prep/batches/:batchId/cook", async (request, reply) => {
+    const household = requireHousehold(request, reply);
+    if (!household) return reply;
+    const { batchId } = request.params as { batchId: string };
+    const plan = repository.getCurrentPlan(household.id);
+    if (!plan) return reply.code(404).send({ error: "no_plan" });
+
+    const body = (request.body ?? {}) as { week?: number; days?: number };
+    const week = Math.max(1, body.week ?? 1);
+    const days = Math.max(1, body.days ?? 7);
+    const prep = planMealPrep(plan, RECIPE_BY_ID, {
+      from: addDays(plan.startDate, (week - 1) * days),
+      days,
+    });
+
+    const batch = prep.sessions.flatMap((session) => session.batches).find((b) => b.id === batchId);
+    if (!batch) {
+      return reply.code(404).send({
+        error: "batch_not_found",
+        message: "Esa tanda no existe en esta ventana. Vuelve a pedir /meal-prep.",
+      });
+    }
+    const pendientes = batch.mealIds.filter(
+      (id) => plan.meals.find((meal) => meal.id === id)?.status !== "cooked",
+    );
+    if (pendientes.length === 0) {
+      return reply.code(409).send({
+        error: "already_cooked",
+        message: "Esta tanda ya se cocinó; el inventario no se descuenta dos veces.",
+      });
+    }
+
+    const result = cookBatch(batch, repository.listInventory(household.id), now());
+    repository.replaceInventory(household.id, result.inventory);
+    const at = new Date().toISOString();
+    for (const mealId of batch.mealIds) repository.setMealStatus(plan.id, mealId, "cooked", at);
+
+    return {
+      batch: result.batch,
+      cookedMealIds: result.cookedMealIds,
+      consumed: result.consumed,
+      shortages: result.shortages,
+      inventory: result.inventory,
+    };
+  });
+
+  // ------------------------------------------------------------- nutrición
+
+  /**
+   * Necesidades energéticas del hogar según el estado físico.
+   *
+   * Si el hogar no tiene perfiles físicos, devuelve la referencia genérica y lo
+   * dice en `anyGeneric` y en `warnings`. Nunca devuelve un número sin decir de
+   * dónde salió: cada persona trae su `basis`.
+   */
+  app.get("/households/:id/nutrition", async (request, reply) => {
+    const household = requireHousehold(request, reply);
+    if (!household) return reply;
+    return {
+      needs: householdNeeds(household),
+      disclaimer:
+        "Estimación con ecuaciones poblacionales. Rinde no es una herramienta médica ni " +
+        "dietética y no sustituye a un profesional de la salud.",
     };
   });
 

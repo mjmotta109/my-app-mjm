@@ -262,6 +262,25 @@ export interface Recipe {
   steps: string[];
   /** `true` mientras la nutrición se calcule sumando ingredientes. */
   nutritionIsEstimated: boolean;
+  /** Cómo se comporta la receta al cocinarla por adelantado. */
+  prep: PrepInfo;
+}
+
+/**
+ * Comportamiento de una receta en cocina por adelantado (meal prep).
+ *
+ * `keepsDays` son días de conservación EN NEVERA a partir del día que se
+ * cocina, contando ese día como el primero. Son valores prudentes de manejo
+ * doméstico, no un análisis microbiológico: ante la duda, menos días.
+ */
+export interface PrepInfo {
+  /** `false` para lo que solo sirve recién hecho: fritos, huevos al momento. */
+  batchFriendly: boolean;
+  /** Días que aguanta en nevera, incluido el día en que se cocina. */
+  keepsDays: number;
+  freezable: boolean;
+  /** Qué conviene dejar sin hacer hasta el momento de servir. */
+  finishNote?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +296,62 @@ export interface UserPreference {
   severity: "soft" | "hard";
 }
 
+/**
+ * Cuánto tiempo tiene el hogar para cocinar (§ tiempo de preparación).
+ *
+ * Se separa entre semana y fin de semana porque es la diferencia que la gente
+ * realmente vive: un martes a las 7 p.m. no se parece en nada a un domingo.
+ * Un slot sin minutos declarados se trata como "sin límite".
+ */
+export interface CookingTimeBudget {
+  /** Minutos disponibles por comida, de lunes a viernes. */
+  weekday: Partial<Record<MealSlot, number>>;
+  /** Minutos disponibles por comida, sábado y domingo. */
+  weekend: Partial<Record<MealSlot, number>>;
+  /** Dificultad máxima aceptable entre semana. */
+  maxWeekdayDifficulty: Difficulty;
+}
+
+/**
+ * Preferencia de cocina por adelantado.
+ *
+ * `batchSize` es cuántas comidas del MISMO plato se cocinan de una sola vez.
+ * 3 significa "cocino una vez y como eso tres veces esa semana".
+ */
+export interface MealPrepPreference {
+  enabled: boolean;
+  /** Comidas por tanda. 1 equivale a no agrupar. */
+  batchSize: number;
+  /** Días que cubre una jornada de cocina. Normalmente 7. */
+  windowDays: number;
+}
+
+export type Sex = "femenino" | "masculino" | "sin_especificar";
+
+export type ActivityLevel = "sedentario" | "ligero" | "moderado" | "alto" | "muy_alto";
+
+export type NutritionGoal = "mantener" | "bajar_peso" | "subir_peso" | "masa_muscular";
+
+/**
+ * Perfil físico de una persona del hogar. **Todos los campos son opcionales**
+ * a propósito (§27): Rinde funciona sin pedir peso, estatura ni edad. Si el
+ * usuario los da, se usan para estimar necesidades energéticas; si no, se usa
+ * una referencia genérica y se dice que es genérica.
+ */
+export interface PersonProfile {
+  id: string;
+  name?: string;
+  kind: "adulto" | "nino";
+  sex: Sex;
+  ageYears?: number;
+  weightKg?: number;
+  heightCm?: number;
+  activity: ActivityLevel;
+  goal: NutritionGoal;
+  /** Marca situaciones que Rinde NO estima y deriva a un profesional. */
+  flags?: ("embarazo" | "lactancia" | "condicion_medica")[];
+}
+
 export interface Household {
   id: string;
   adults: number;
@@ -288,6 +363,24 @@ export interface Household {
   preferences: UserPreference[];
   tier: "free" | "premium";
   createdOn: IsoDate;
+  /** Sin definir = sin límite de tiempo, que es como se comportaba antes. */
+  cookingTime?: CookingTimeBudget;
+  /**
+   * Modo "cocinar por adelantado".
+   *
+   * Cambia cómo se GENERA el plan, no solo cómo se muestra: si el hogar va a
+   * cocinar por tandas, el plan tiene que repetir cada plato varias veces
+   * dentro de la semana, porque si no, no hay nada que agrupar. Sin esto, la
+   * puntuación de variedad reparte 21 recetas distintas en 21 comidas y el
+   * meal prep no ahorra ni un minuto.
+   */
+  mealPrep?: MealPrepPreference;
+  /**
+   * Perfiles físicos, opcionales. Las PORCIONES siempre salen de
+   * `adults`/`children`; estos perfiles solo afinan las metas nutricionales.
+   * Separarlos evita que dar el peso cambie cuánta comida se cocina.
+   */
+  nutritionProfiles?: PersonProfile[];
 }
 
 export interface InventoryItem {
@@ -386,6 +479,11 @@ export interface PlanDiagnostics {
   mealsPlanned: number;
   mealsRequested: number;
   distinctRecipes: number;
+  /**
+   * Comidas que NO cupieron en el tiempo de cocina declarado. Se planificaron
+   * igual (con la receta más rápida disponible) pero el hogar debe saberlo.
+   */
+  mealsOverTimeBudget: number;
   /** Pasos de reparación ejecutados para intentar caber en el presupuesto. */
   repairSteps: string[];
   warnings: string[];

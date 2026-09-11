@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   formatCop, humanize, parsePantryText, planPurchase, roundForDisplay,
-  type InventoryItem, type MealSlot, type ParsedItem,
+  type CookingTimeBudget, type InventoryItem, type MealSlot, type ParsedItem,
 } from "@rinde/core";
+import { TIME_PRESETS } from "../lib/time-presets.js";
 import { INGREDIENT_BY_ID, INGREDIENTS } from "../lib/catalog.js";
 import { createHousehold, createInventoryItem, useStore } from "../state/store.js";
 import { Card, Counter, Notice, Toggle } from "../components/ui.js";
@@ -46,6 +47,8 @@ export function Onboarding(): React.JSX.Element {
   const [ninos, setNinos] = useState(0);
   const [dias, setDias] = useState(30);
   const [slots, setSlots] = useState<MealSlot[]>(["desayuno", "almuerzo", "cena"]);
+  const [tiempoId, setTiempoId] = useState("normal");
+  const [tandas, setTandas] = useState(false);
   const [texto, setTexto] = useState("");
   const [borradores, setBorradores] = useState<Borrador[]>([]);
   const [noReconocido, setNoReconocido] = useState<string[]>([]);
@@ -97,8 +100,11 @@ export function Onboarding(): React.JSX.Element {
       .filter((item): item is Borrador & { qtyBase: number } => item.qtyBase !== null && item.qtyBase > 0)
       .map((item) => createInventoryItem(item.ingredientId, item.qtyBase));
 
+    const preset = TIME_PRESETS.find((entry) => entry.id === tiempoId);
     const household = createHousehold({
       adults: adultos, children: ninos, budgetCop: presupuestoCop, slots, days: dias,
+      ...(preset ? { cookingTime: preset.budget } : {}),
+      ...(tandas ? { mealPrep: { enabled: true, batchSize: 3, windowDays: 7 } } : {}),
     });
     dispatch({ type: "onboard", household, inventory });
     navigate("/", { replace: true });
@@ -194,6 +200,52 @@ export function Onboarding(): React.JSX.Element {
             <p className="pequeno tenue">
               Son {comidas} comidas para {personas} {personas === 1 ? "persona" : "personas"}.
             </p>
+          )}
+        </div>
+      ),
+    },
+    {
+      titulo: "¿Cuánto tiempo tienes para cocinar?",
+      subtitulo: "Rinde solo propone recetas que te quepan en el día que tienes.",
+      valido: true,
+      contenido: (
+        <div className="pila">
+          {TIME_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={`opcion ${tiempoId === preset.id ? "opcion--activa" : ""}`}
+              onClick={() => setTiempoId(preset.id)}
+            >
+              <span className="opcion__marca" aria-hidden="true">
+                {tiempoId === preset.id ? "✓" : ""}
+              </span>
+              <span className="crecer">
+                <strong>{preset.label}</strong>
+                <div className="pequeno tenue">{preset.description}</div>
+                <div className="diminuto tenue" style={{ marginTop: 4 }}>
+                  Entre semana: almuerzo {preset.budget.weekday.almuerzo} min · cena{" "}
+                  {preset.budget.weekday.cena} min
+                </div>
+              </span>
+            </button>
+          ))}
+
+          <hr className="separador" style={{ margin: "10px 0" }} />
+
+          <Toggle checked={tandas} onChange={setTandas}>
+            <strong>Quiero cocinar por adelantado</strong>
+            <div className="pequeno tenue">
+              Cocinas dos veces por semana en vez de todos los días. Rinde arma el plan
+              repitiendo cada plato para que valga la pena hacer la tanda.
+            </div>
+          </Toggle>
+
+          {tandas && (
+            <Notice tone="info">
+              Con esto vas a comer el mismo plato hasta tres veces por semana. Es el costo de
+              cocinar una sola vez: si prefieres variedad todos los días, déjalo apagado.
+            </Notice>
           )}
         </div>
       ),

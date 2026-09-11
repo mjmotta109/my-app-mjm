@@ -180,12 +180,20 @@ PriceHistory   ingredientId, semanaISO, precioUnitario, variación%
 
 Recipe         id, nombre, descripción, porciones base, minutos, dificultad,
                categoría (desayuno|almuerzo|cena|snack), región, etiquetas,
-               restricciones que cumple, pasos, nutrición estimada
+               restricciones que cumple, pasos, nutrición estimada,
+               prep (se puede adelantar, días en nevera, congelable)
 RecipeIngredient  recipeId, ingredientId, cantidad, unidad, opcional?,
                sustitucionesPermitidas[]
 
 Household      id, adultos, niños, presupuesto mensual (COP), ciudad,
-               comidas activas, díasDelPlan, preferencias, exclusiones
+               comidas activas, díasDelPlan, preferencias, exclusiones,
+               tiempoDeCocina?, modoTandas?, perfilesFísicos?
+
+CookingTimeBudget  minutos por comida entre semana y fin de semana,
+               dificultad máxima entre semana
+MealPrepPreference batchSize (comidas por tanda), windowDays
+PersonProfile  sexo?, edad?, peso?, estatura?, actividad, objetivo, banderas?
+               (TODO opcional: Rinde planifica sin datos personales)
 UserPreference  householdId, tipo (dislike|allergy|diet), valor, severidad
 
 InventoryItem  id, householdId, ingredientId, cantidad, unidad,
@@ -321,7 +329,10 @@ Declarado explícitamente para que nadie lo asuma:
 - **No trae precios reales automáticamente.** No hay ninguna API de precios
   conectada; ver `DATA_SOURCES.md` para por qué y qué haría falta.
 - **No es una herramienta médica.** La nutrición es estimada y está marcada
-  como tal. Las alergias se tratan como exclusiones duras + advertencia.
+  como tal. Las alergias se tratan como exclusiones duras + advertencia. Las
+  necesidades energéticas usan ecuaciones poblacionales, con sus fuentes y sus
+  límites en [NUTRICION.md](./NUTRICION.md); no bajan del piso de seguridad y
+  no estiman embarazo, lactancia ni condiciones médicas.
 - **No sincroniza entre dispositivos** todavía (no hay cuentas).
 - **No usa un LLM** en el MVP. La interfaz está declarada; no hay clave de API
   ni llamada activa.

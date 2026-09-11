@@ -198,3 +198,119 @@ Tampoco se escribió un adaptador de SIPSA: desde el entorno de desarrollo no se
 pudo abrir ni un endpoint, así que **no se conoce el esquema real de campos**.
 Escribir un adaptador con nombres de columna supuestos sería inventar una API.
 Ver [DATA_SOURCES.md](./DATA_SOURCES.md).
+
+---
+
+## D17 — El tiempo de cocina es un límite, no una preferencia
+
+Una receta de 90 minutos no entra en un martes de 25, por buena que sea en todo
+lo demás. Si el tiempo solo restara puntos, una receta larga podría ganar igual
+por ser barata o por aprovechar la despensa.
+
+Por eso el tiempo **filtra** candidatas antes de puntuar. Dentro del límite
+todavía puntúa (mejor cuanto más margen deje), y la dificultad máxima entre
+semana hunde —sin prohibir— lo que el hogar no quiere manejar un miércoles.
+
+Cuando **ninguna** receta cabe, no se deja la comida sin planificar: se toma la
+más rápida disponible y se cuenta en `diagnostics.mealsOverTimeBudget`, que la
+interfaz muestra. Fallar en silencio sería peor que no tener la función.
+
+Se pregunta por presets ("Siempre corriendo", "Normal", "Me gusta cocinar"), no
+por minutos: pedirle al usuario que estime los minutos de cada comida de cada
+día es pasarle el trabajo de diseño.
+
+---
+
+## D18 — El meal prep cambia cómo se GENERA el plan 🔍
+
+**Salió de un problema encontrado durante el desarrollo.**
+
+La primera versión agrupaba las comidas ya planificadas: si dos comidas de la
+semana usaban la misma receta, se cocinaban juntas. Resultado medido: **0
+minutos ahorrados**. Cada tanda cubría exactamente una comida.
+
+La causa era estructural. Con 119 recetas y una puntuación de variedad que
+penaliza repetir, el plan reparte 21 recetas distintas en 21 comidas. No había
+nada que agrupar, y no lo habría nunca: **la variedad estaba peleando contra el
+meal prep**.
+
+Agrupar después no arregla eso. Cocinar por tandas exige que el plan repita cada
+plato a propósito, así que es una preferencia del hogar (`Household.mealPrep`)
+que cambia la puntuación:
+
+- Dentro de la semana la lógica se **invierte**: completar una tanda ya empezada
+  puntúa alto; una vez completa, se pasa a otra receta.
+- La variedad se conserva **entre** semanas, para que el mes no se resuelva con
+  cuatro recetas (ver D19).
+- Lo que solo sirve recién hecho pierde terreno, sin prohibirse.
+
+Medido en el mismo escenario: **21 de 21 comidas adelantadas, 192 minutos
+ahorrados** (428 → 236) en la primera semana.
+
+El costo está dicho en la interfaz antes de activarlo: vas a comer el mismo
+plato hasta tres veces por semana.
+
+---
+
+## D19 — En modo tandas, el cupo de repeticiones se multiplica 🔍
+
+**Del mismo hallazgo.** Al invertir la variedad dentro de la semana, el mes
+entero pasó a resolverse con **11 recetas distintas**: el cupo total de
+repeticiones (`maxRepeats`) se agotaba con la primera tanda y después ya no
+discriminaba.
+
+El cupo se multiplica por `batchSize`, que es exactamente lo que el modo tandas
+hace a propósito. Resultado: **29 recetas distintas** en el mes, con tandas de
+tres.
+
+Además, una tanda se reparte **entre días**: la misma receta no sale de almuerzo
+y cena el mismo día. Eso no ahorra una olla, solo cansa.
+
+---
+
+## D20 — Una tanda descuenta el inventario UNA vez
+
+Cocinar por adelantado y después marcar cada comida como cocinada descontaría el
+inventario tres veces por una sola olla.
+
+`cookBatch()` descuenta las cantidades agregadas de la tanda y marca **todas**
+sus comidas como cocinadas de golpe. El motor comparte el descuento con
+`cookMeal()` a través de `consumeFromInventory()`: es el mismo código sobre
+cantidades distintas, no dos implementaciones que puedan divergir.
+
+El costo de la tanda se **agrega desde las comidas del plan**, no se reescala la
+receta: así el meal prep y el presupuesto nunca se descuadran entre sí.
+
+---
+
+## D21 — Los datos físicos son opcionales y no cambian las porciones
+
+Las porciones salen **siempre** de `adults` y `children`. El perfil físico
+(`nutritionProfiles`) solo afina las metas de energía y proteína.
+
+Separarlos evita algo que sería muy raro de usar: que dar tu peso cambie cuánta
+comida se cocina. Y permite que el camino por defecto —planificar sin dar un
+solo dato personal— sea completo, no una versión mutilada.
+
+Lo que el módulo **no** hace, deliberadamente: estimar embarazo, lactancia o
+condiciones médicas; bajar del piso calórico de seguridad; o devolver un número
+sin decir de dónde salió (cada estimación trae su `basis`, y cuando faltan datos
+lo declara en vez de rellenar con un peso plausible).
+
+Fuentes y límites en [NUTRICION.md](./NUTRICION.md).
+
+---
+
+## D22 — El recetario se amplió con criterio de mercado, no de bandera
+
+De 60 a **119 recetas**. Hay curry, salteados, wraps, lasaña y hummus junto al
+sancocho y el ajiaco.
+
+El criterio no es de dónde viene el plato: es que **se pueda cocinar aquí**, con
+lo que se consigue en una plaza o un supermercado colombiano. Por eso se
+añadieron 27 ingredientes (champiñones, quinua, soya texturizada, leche de coco,
+tortillas de trigo, arracacha, mazorca) y ninguno que haya que importar.
+
+Los tiempos van de 6 a 90 minutos **a propósito**: sin recetas rápidas de
+verdad, el presupuesto de tiempo (D17) no tendría con qué llenar un martes. Los
+desayunos, que eran el punto flojo con 15, pasaron a 29.

@@ -91,7 +91,8 @@ export function PlanScreen(): React.JSX.Element {
                         <span className="diminuto tenue">{SLOT_LABEL[meal.slot]}</span>
                         <div className="lista__nombre"><strong>{receta?.name ?? meal.recipeId}</strong></div>
                         <span className="diminuto tenue">
-                          {receta?.minutes ?? "?"} min · {formatCop(meal.costPerPersonCop)} / persona
+                          ⏱ {receta?.minutes ?? "?"} min · {DIFICULTAD[receta?.difficulty ?? "facil"]}{" "}
+                          · {formatCop(meal.costPerPersonCop)} / persona
                         </span>
                       </span>
                       <span style={{ textAlign: "right", flex: "none" }}>
@@ -118,3 +119,5 @@ const SLOT_EMOJI: Record<string, string> = {
   cena: "🌙",
   snack: "🍎",
 };
+
+const DIFICULTAD: Record<string, string> = { facil: "Fácil", media: "Media", dificil: "Difícil" };

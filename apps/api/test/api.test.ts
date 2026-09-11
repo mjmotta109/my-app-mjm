@@ -270,6 +270,140 @@ describe("plan, mercado y cocinar — el flujo del §37", () => {
   });
 });
 
+describe("cocinar por adelantado y nutrición", () => {
+  let prepHouseholdId: string;
+
+  it("crea un hogar en modo tandas con tiempo de cocina", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/households",
+      payload: {
+        adults: 2, children: 0, budgetCop: 800_000, days: 14,
+        slots: ["desayuno", "almuerzo", "cena"],
+      },
+    });
+    prepHouseholdId = response.json().id;
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/households/${prepHouseholdId}`,
+      payload: {
+        cookingTime: {
+          weekday: { desayuno: 15, almuerzo: 35, cena: 25 },
+          weekend: { desayuno: 40, almuerzo: 90, cena: 45 },
+          maxWeekdayDifficulty: "facil",
+        },
+        mealPrep: { enabled: true, batchSize: 3, windowDays: 7 },
+      },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().mealPrep.enabled).toBe(true);
+
+    const plan = await app.inject({
+      method: "POST",
+      url: `/households/${prepHouseholdId}/plan`,
+      payload: { startDate: DEMO_OBSERVED_ON },
+    });
+    expect(plan.statusCode).toBe(201);
+    expect(plan.json().diagnostics.mealsOverTimeBudget).toBe(0);
+  });
+
+  it("devuelve jornadas de cocina con tandas que cubren varias comidas", async () => {
+    const response = await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/meal-prep?week=1`,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.batchModeEnabled).toBe(true);
+    expect(body.prep.sessions.length).toBeGreaterThan(0);
+    expect(body.prep.minutesWithPrep).toBeLessThan(body.prep.minutesIfCookedDaily);
+
+    const tandas = body.prep.sessions.flatMap((s: { batches: unknown[] }) => s.batches);
+    expect(tandas.some((b: { mealIds: string[] }) => b.mealIds.length > 1)).toBe(true);
+    expect(body.shoppingBySession[0].ingredients.length).toBeGreaterThan(0);
+  });
+
+  it("cocinar una tanda resuelve todas sus comidas de una vez", async () => {
+    const prep = (await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/meal-prep?week=1`,
+    })).json();
+    const batch = prep.prep.sessions
+      .flatMap((s: { batches: { id: string; mealIds: string[] }[] }) => s.batches)
+      .find((b: { mealIds: string[] }) => b.mealIds.length > 1)!;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/households/${prepHouseholdId}/meal-prep/batches/${batch.id}/cook`,
+      payload: { week: 1 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().cookedMealIds).toEqual(batch.mealIds);
+
+    const plan = (await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/plan/current`,
+    })).json();
+    for (const mealId of batch.mealIds) {
+      expect(plan.meals.find((meal: { id: string }) => meal.id === mealId).status).toBe("cooked");
+    }
+  });
+
+  it("no cocina dos veces la misma tanda", async () => {
+    const prep = (await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/meal-prep?week=1`,
+    })).json();
+    const cocinada = prep.prep.sessions
+      .flatMap((s: { batches: { id: string; mealIds: string[] }[] }) => s.batches)
+      .find((b: { mealIds: string[] }) => b.mealIds.length > 1)!;
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/households/${prepHouseholdId}/meal-prep/batches/${cocinada.id}/cook`,
+      payload: { week: 1 },
+    });
+    expect(response.statusCode).toBe(409);
+  });
+
+  it("404 para una tanda que no existe", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/households/${prepHouseholdId}/meal-prep/batches/no_existe/cook`,
+      payload: { week: 1 },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it("sin perfiles físicos devuelve la referencia genérica y lo declara", async () => {
+    const response = await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/nutrition`,
+    });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.needs.anyGeneric).toBe(true);
+    expect(body.needs.kcal).toBe(4000);
+    expect(body.disclaimer).toMatch(/no es una herramienta médica/i);
+  });
+
+  it("con perfil físico estima con Mifflin-St Jeor y explica en qué se basó", async () => {
+    await app.inject({
+      method: "PATCH",
+      url: `/households/${prepHouseholdId}`,
+      payload: {
+        nutritionProfiles: [{
+          id: "p1", name: "Ana", kind: "adulto", sex: "femenino",
+          ageYears: 34, weightKg: 62, heightCm: 163, activity: "moderado", goal: "mantener",
+        }],
+      },
+    });
+    const response = await app.inject({
+      method: "GET", url: `/households/${prepHouseholdId}/nutrition`,
+    });
+    const body = response.json();
+    expect(body.needs.anyGeneric).toBe(false);
+    expect(body.needs.perPerson[0].needs.bmrKcal).toBe(1308);
+    expect(body.needs.perPerson[0].needs.basis).toMatch(/Mifflin-St Jeor/);
+  });
+});
+
 describe("administración de precios", () => {
   it("sin token no se puede entrar", async () => {
     const response = await app.inject({ method: "POST", url: "/admin/prices", payload: {} });

@@ -1,12 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
 import type { ReactNode } from "react";
 import {
+  cookBatch as cookBatchEngine,
   cookMeal as cookMealEngine,
   generateMealPlan,
+  type CookingTimeBudget,
   type Household,
   type InventoryItem,
   type MealPlan,
+  type MealPrepPreference,
   type MealSlot,
+  type PersonProfile,
+  type PrepBatch,
   type UserPreference,
 } from "@rinde/core";
 import { CATALOG_AS_OF, INGREDIENT_BY_ID, PRICES, RECIPES } from "../lib/catalog.js";
@@ -49,6 +54,10 @@ export type Action =
   | { type: "onboard"; household: Household; inventory: InventoryItem[] }
   | { type: "updateHousehold"; patch: Partial<Household> }
   | { type: "setPreferences"; preferences: UserPreference[] }
+  | { type: "setCookingTime"; cookingTime: CookingTimeBudget | undefined }
+  | { type: "setMealPrep"; mealPrep: MealPrepPreference | undefined }
+  | { type: "setNutritionProfiles"; profiles: PersonProfile[] }
+  | { type: "cookBatch"; batch: PrepBatch }
   | { type: "addInventory"; item: InventoryItem }
   | { type: "updateInventory"; id: string; qtyBase: number; expiresOn?: string }
   | { type: "removeInventory"; id: string }
@@ -112,6 +121,50 @@ export function reducer(state: AppData, action: Action): AppData {
       if (!state.household) return state;
       const household = { ...state.household, preferences: action.preferences };
       return { ...state, household, plan: buildPlan(household, state.inventory) };
+    }
+
+    // El tiempo de cocina y el modo tandas cambian cómo se GENERA el plan, no
+    // solo cómo se muestra: por eso los tres regeneran.
+    case "setCookingTime": {
+      if (!state.household) return state;
+      const household = { ...state.household, cookingTime: action.cookingTime };
+      return { ...state, household, plan: buildPlan(household, state.inventory) };
+    }
+
+    case "setMealPrep": {
+      if (!state.household) return state;
+      const household = { ...state.household, mealPrep: action.mealPrep };
+      return { ...state, household, plan: buildPlan(household, state.inventory) };
+    }
+
+    case "setNutritionProfiles": {
+      if (!state.household) return state;
+      const household = { ...state.household, nutritionProfiles: action.profiles };
+      return { ...state, household, plan: buildPlan(household, state.inventory) };
+    }
+
+    case "cookBatch": {
+      if (!state.plan) return state;
+      // Una tanda descuenta el inventario UNA vez y deja resueltas todas sus
+      // comidas. Descontarlas una por una después descontaría de más.
+      const pendientes = action.batch.mealIds.filter(
+        (id) => state.plan!.meals.find((meal) => meal.id === id)?.status !== "cooked",
+      );
+      if (pendientes.length === 0) return state;
+
+      const result = cookBatchEngine(action.batch, state.inventory, today());
+      const cocinadas = new Set(action.batch.mealIds);
+      return {
+        ...state,
+        inventory: result.inventory,
+        cookedMealIds: [...new Set([...state.cookedMealIds, ...action.batch.mealIds])],
+        plan: {
+          ...state.plan,
+          meals: state.plan.meals.map((meal) =>
+            cocinadas.has(meal.id) ? { ...meal, status: "cooked" as const } : meal,
+          ),
+        },
+      };
     }
 
     case "addInventory": {
@@ -235,6 +288,8 @@ export function createHousehold(input: {
   slots: MealSlot[];
   days: number;
   city?: string;
+  cookingTime?: CookingTimeBudget;
+  mealPrep?: MealPrepPreference;
 }): Household {
   return {
     id: newId("hogar"),
@@ -247,6 +302,20 @@ export function createHousehold(input: {
     preferences: [],
     tier: "free",
     createdOn: today(),
+    ...(input.cookingTime ? { cookingTime: input.cookingTime } : {}),
+    ...(input.mealPrep ? { mealPrep: input.mealPrep } : {}),
+  };
+}
+
+/** Perfil físico nuevo, con lo mínimo y sin pedir datos personales de entrada. */
+export function createProfile(kind: "adulto" | "nino", name?: string): PersonProfile {
+  return {
+    id: newId("perfil"),
+    kind,
+    sex: "sin_especificar",
+    activity: "ligero",
+    goal: "mantener",
+    ...(name ? { name } : {}),
   };
 }
 

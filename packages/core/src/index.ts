@@ -54,9 +54,25 @@ export {
 } from "./nutrition.js";
 
 export {
-  generateMealPlan, purchaseTotalOf, DEFAULT_WEIGHTS, PLANNER_VERSION,
+  generateMealPlan, purchaseTotalOf, minutesAvailable, maxDifficultyFor,
+  DEFAULT_WEIGHTS, PLANNER_VERSION,
   type PlanRequest, type ScoringWeights,
 } from "./planner.js";
+
+export {
+  personEnergyNeeds, householdNeeds, restingEnergy, perMealTargets,
+  MIFFLIN_ST_JEOR, ACTIVITY_FACTORS, ACTIVITY_LABELS, GOAL_ADJUSTMENT, GOAL_LABELS,
+  PROTEIN_G_PER_KG, KCAL_FLOOR, FIBER_TARGET_G, GENERIC_ADULT, CHILD_ENERGY_FACTOR,
+  NUTRITION_DISCLAIMER_SHORT,
+  type EnergyNeeds, type HouseholdNeeds, type ProteinRange,
+} from "./nutrition-needs.js";
+
+export {
+  planMealPrep, cookBatch, storageLabel, sessionIngredients,
+  FREEZER_DAYS, BATCH_MARGINAL_TIME,
+  type MealPrepPlan, type MealPrepOptions, type PrepBatch, type PrepSession,
+  type FreshMeal, type Storage, type CookBatchResult,
+} from "./meal-prep.js";
 
 export {
   buildShoppingList, cycleCount, toggleChecked, pendingTotal, DEFAULT_CYCLE_DAYS,
@@ -64,8 +80,8 @@ export {
 } from "./shopping.js";
 
 export {
-  cookMeal, detectLeftovers, suggestLeftoverUses,
-  type CookResult, type LeftoverSuggestion,
+  cookMeal, consumeFromInventory, detectLeftovers, suggestLeftoverUses,
+  type CookResult, type ConsumeResult, type LeftoverSuggestion,
 } from "./cooking.js";
 
 export {

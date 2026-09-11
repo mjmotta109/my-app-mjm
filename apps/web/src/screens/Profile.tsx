@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FEATURE_LABELS, can, describeChange, formatCop, weeklyPriceUpdate } from "@rinde/core";
+import { Link, useNavigate } from "react-router-dom";
+import { FEATURE_LABELS, can, describeChange, formatCop, householdNeeds, weeklyPriceUpdate } from "@rinde/core";
+import { TIME_PRESETS, matchPreset } from "../lib/time-presets.js";
 import type { Feature, MealSlot, UserPreference } from "@rinde/core";
 import {
   CATALOG_AS_OF, DEMO_NOTICE, DEMO_PRICE_HISTORY, INGREDIENTS, INGREDIENT_BY_ID,
@@ -28,6 +29,7 @@ export function Profile(): React.JSX.Element {
   }
 
   const alergias = household.preferences.filter((preference) => preference.kind === "allergy");
+  const needs = householdNeeds(household);
 
   function setPreference(value: string, activo: boolean): void {
     const otras = household!.preferences.filter(
@@ -121,6 +123,76 @@ export function Profile(): React.JSX.Element {
               </Toggle>
             ))}
           </div>
+        </section>
+
+        {/* ------------------------------------------- tiempo de cocina */}
+        <section>
+          <div className="grupo-titulo"><span>Tiempo de cocina</span></div>
+          <div className="pila">
+            {TIME_PRESETS.map((preset) => (
+              <Toggle
+                key={preset.id}
+                checked={matchPreset(household.cookingTime) === preset.id}
+                onChange={(activo) =>
+                  dispatch({
+                    type: "setCookingTime",
+                    cookingTime: activo ? preset.budget : undefined,
+                  })
+                }
+              >
+                <strong>{preset.label}</strong>
+                <div className="pequeno tenue">{preset.description}</div>
+              </Toggle>
+            ))}
+            <Toggle
+              checked={household.cookingTime === undefined}
+              onChange={(activo) =>
+                dispatch({ type: "setCookingTime", cookingTime: activo ? undefined : TIME_PRESETS[1]!.budget })
+              }
+            >
+              <strong>Sin límite</strong>
+              <div className="pequeno tenue">No filtrar recetas por tiempo.</div>
+            </Toggle>
+          </div>
+        </section>
+
+        {/* ------------------------------------------------ cocinar antes */}
+        <section>
+          <div className="grupo-titulo"><span>Cocinar por adelantado</span></div>
+          <Card>
+            <Toggle
+              checked={household.mealPrep?.enabled ?? false}
+              onChange={(activo) =>
+                dispatch({
+                  type: "setMealPrep",
+                  mealPrep: activo ? { enabled: true, batchSize: 3, windowDays: 7 } : undefined,
+                })
+              }
+            >
+              <strong>Armar el plan por tandas</strong>
+              <div className="pequeno tenue">
+                Repite cada plato dentro de la semana para que una sola olla resuelva varias
+                comidas. Menos variedad diaria, mucho menos tiempo en la cocina.
+              </div>
+            </Toggle>
+          </Card>
+        </section>
+
+        {/* ------------------------------------------------- estado físico */}
+        <section>
+          <div className="grupo-titulo"><span>Nutrición</span></div>
+          <Link to="/estado-fisico" className="tarjeta-boton">
+            <span aria-hidden="true" style={{ fontSize: 20 }}>🧍</span>
+            <span className="crecer">
+              <strong>Estado físico y necesidades</strong>
+              <div className="pequeno tenue">
+                {(household.nutritionProfiles?.length ?? 0) > 0
+                  ? `${household.nutritionProfiles!.length} perfil(es) · ${needs.kcal.toLocaleString("es-CO")} kcal al día`
+                  : "Opcional. Sin esto se usa una referencia genérica."}
+              </div>
+            </span>
+            <span className="tenue" aria-hidden="true">›</span>
+          </Link>
         </section>
 
         {/* ---------------------------------------------------- alergias */}

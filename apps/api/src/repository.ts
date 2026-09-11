@@ -46,9 +46,11 @@ export class SqliteRepository implements Repository {
     this.db
       .prepare(
         `INSERT INTO household (id, adults, children, budget_cop, city, slots, days,
-                                preferences, tier, created_on)
+                                preferences, tier, created_on,
+                                cooking_time, meal_prep, nutrition_profiles)
          VALUES (@id, @adults, @children, @budgetCop, @city, @slots, @days,
-                 @preferences, @tier, @createdOn)`,
+                 @preferences, @tier, @createdOn,
+                 @cookingTime, @mealPrep, @nutritionProfiles)`,
       )
       .run({
         id: household.id,
@@ -61,6 +63,11 @@ export class SqliteRepository implements Repository {
         preferences: JSON.stringify(household.preferences),
         tier: household.tier,
         createdOn: household.createdOn,
+        cookingTime: household.cookingTime ? JSON.stringify(household.cookingTime) : null,
+        mealPrep: household.mealPrep ? JSON.stringify(household.mealPrep) : null,
+        nutritionProfiles: household.nutritionProfiles
+          ? JSON.stringify(household.nutritionProfiles)
+          : null,
       });
   }
 
@@ -80,6 +87,13 @@ export class SqliteRepository implements Repository {
       preferences: JSON.parse(row["preferences"] as string),
       tier: row["tier"] as Household["tier"],
       createdOn: row["created_on"] as string,
+      ...(row["cooking_time"]
+        ? { cookingTime: JSON.parse(row["cooking_time"] as string) }
+        : {}),
+      ...(row["meal_prep"] ? { mealPrep: JSON.parse(row["meal_prep"] as string) } : {}),
+      ...(row["nutrition_profiles"]
+        ? { nutritionProfiles: JSON.parse(row["nutrition_profiles"] as string) }
+        : {}),
     };
   }
 
@@ -92,7 +106,9 @@ export class SqliteRepository implements Repository {
         `UPDATE household
             SET adults = @adults, children = @children, budget_cop = @budgetCop,
                 city = @city, slots = @slots, days = @days,
-                preferences = @preferences, tier = @tier
+                preferences = @preferences, tier = @tier,
+                cooking_time = @cookingTime, meal_prep = @mealPrep,
+                nutrition_profiles = @nutritionProfiles
           WHERE id = @id`,
       )
       .run({
@@ -105,6 +121,11 @@ export class SqliteRepository implements Repository {
         days: merged.days,
         preferences: JSON.stringify(merged.preferences),
         tier: merged.tier,
+        cookingTime: merged.cookingTime ? JSON.stringify(merged.cookingTime) : null,
+        mealPrep: merged.mealPrep ? JSON.stringify(merged.mealPrep) : null,
+        nutritionProfiles: merged.nutritionProfiles
+          ? JSON.stringify(merged.nutritionProfiles)
+          : null,
       });
     return merged;
   }

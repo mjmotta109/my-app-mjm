@@ -13,6 +13,8 @@ import { RecipeDetail, RecipeList } from "./screens/Recipes.js";
 import { Market } from "./screens/Market.js";
 import { Profile } from "./screens/Profile.js";
 import { RindeMas } from "./screens/RindeMas.js";
+import { MealPrep } from "./screens/MealPrep.js";
+import { PhysicalProfile } from "./screens/PhysicalProfile.js";
 import { StoreProvider, useStore } from "./state/store.js";
 
 /**
@@ -61,6 +63,8 @@ function Shell(): React.JSX.Element {
         <Route path="/recetas" element={<Protegida ok={state.onboarded}><RecipeList /></Protegida>} />
         <Route path="/receta/:recipeId" element={<Protegida ok={state.onboarded}><RecipeDetail /></Protegida>} />
         <Route path="/rinde-mas" element={<Protegida ok={state.onboarded}><RindeMas /></Protegida>} />
+        <Route path="/cocinar-adelantado" element={<Protegida ok={state.onboarded}><MealPrep /></Protegida>} />
+        <Route path="/estado-fisico" element={<Protegida ok={state.onboarded}><PhysicalProfile /></Protegida>} />
         <Route path="/perfil" element={<Protegida ok={state.onboarded}><Profile /></Protegida>} />
         <Route path="*" element={<Navigate to={state.onboarded ? "/" : "/bienvenida"} replace />} />
       </Routes>

@@ -24,16 +24,29 @@ export interface CookResult {
   meal: Meal;
 }
 
-export function cookMeal(
-  meal: Meal,
+export interface ConsumeResult {
+  inventory: InventoryItem[];
+  shortages: { ingredientId: string; missingBase: number }[];
+  consumed: { ingredientId: string; qtyBase: number }[];
+}
+
+/**
+ * Descuenta un conjunto de líneas del inventario.
+ *
+ * Lo usan tanto cocinar una comida como cocinar una tanda completa de meal
+ * prep: es exactamente el mismo descuento sobre distintas cantidades.
+ * No muta el inventario recibido.
+ */
+export function consumeFromInventory(
+  lines: readonly { ingredientId: string; qtyBase: number }[],
   inventory: readonly InventoryItem[],
   asOf: IsoDate,
-): CookResult {
+): ConsumeResult {
   const items = inventory.map((item) => ({ ...item }));
-  const shortages: CookResult["shortages"] = [];
-  const consumed: CookResult["consumed"] = [];
+  const shortages: ConsumeResult["shortages"] = [];
+  const consumed: ConsumeResult["consumed"] = [];
 
-  for (const line of meal.lines) {
+  for (const line of lines) {
     let remaining = line.qtyBase;
     if (remaining <= 0) continue;
 
@@ -56,12 +69,16 @@ export function cookMeal(
     }
   }
 
-  return {
-    inventory: items.filter((item) => item.qtyBase > 0.0001),
-    shortages,
-    consumed,
-    meal: { ...meal, status: "cooked" },
-  };
+  return { inventory: items.filter((item) => item.qtyBase > 0.0001), shortages, consumed };
+}
+
+export function cookMeal(
+  meal: Meal,
+  inventory: readonly InventoryItem[],
+  asOf: IsoDate,
+): CookResult {
+  const result = consumeFromInventory(meal.lines, inventory, asOf);
+  return { ...result, meal: { ...meal, status: "cooked" } };
 }
 
 function compareByExpiry(a: InventoryItem, b: InventoryItem): number {
