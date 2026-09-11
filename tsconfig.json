@@ -1,0 +1,14 @@
+{
+  "//": [
+    "tsconfig raíz en modo 'solution': no compila nada por sí mismo (files: []),",
+    "solo referencia los proyectos del monorepo para que `tsc -b` funcione desde",
+    "la raíz sin tener que enumerarlos a mano en cada invocación."
+  ],
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/data" },
+    { "path": "./apps/web" },
+    { "path": "./apps/api" }
+  ]
+}
