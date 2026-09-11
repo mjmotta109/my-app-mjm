@@ -21,18 +21,33 @@ Cómo llevar Rinde de PWA a una app publicable en Google Play.
 | Material de la ficha de Play | `apps/web/store/` |
 | Firma de release preparada | Guardada tras `keystore.properties` |
 
-### Hecho pero **NO verificado aquí**
+### El APK compila — verificado en CI
 
-**El APK nunca se compiló en este entorno.** El contenedor de desarrollo tiene
-JDK 21 y Gradle, pero **no el SDK de Android**: la política de red bloquea
-`dl.google.com` con un 403.
+**El APK se compila correctamente.** No en este contenedor (que no tiene el SDK
+de Android; ver §2), sino en `.github/workflows/android.yml`, donde los runners
+de GitHub sí lo traen.
 
-Por eso existe `.github/workflows/android.yml`: los runners de GitHub sí traen
-el SDK, así que el build nativo se verifica ahí en cada push y deja el APK como
-artefacto descargable.
+| | |
+|---|---|
+| Estado | ✅ verde |
+| Tamaño del APK de depuración | **4,38 MB** |
+| Artefacto | `rinde-debug-apk`, descargable desde la pestaña Actions |
 
-Hasta que ese workflow pase en verde, trata la configuración de Gradle como
-**escrita con cuidado pero sin probar**.
+El workflow corre el typecheck y las 216 pruebas antes de compilar, y falla si
+el APK no aparece o es sospechosamente pequeño.
+
+### Lo que sigue SIN verificar
+
+**Nadie ha ejecutado la app en un dispositivo.** Que compile no prueba que el
+botón atrás se comporte bien, que el splash no parpadee o que el almacenamiento
+nativo persista entre reinicios.
+
+Para eso: descarga el artefacto de Actions, descomprímelo e instálalo en un
+teléfono con `adb install app-debug.apk` (o pásalo por archivo y ábrelo con la
+instalación de orígenes desconocidos activada).
+
+Lo que sí está probado en navegador: 216 pruebas automáticas y 30 pasos de
+prueba de humo en Chromium a 390 px, incluida la persistencia tras recargar.
 
 ---
 
@@ -47,8 +62,9 @@ No hay que tocar nada. Haz push y el workflow compila el APK. Claude puede
 lanzar el workflow y leer los logs con las herramientas de GitHub, así que
 igual detecta y corrige los errores de compilación.
 
-**Ventaja:** funciona hoy, sin configurar nada.
-**Límite:** compila, pero no ejecuta la app en un emulador.
+**Ventaja:** funciona hoy, sin configurar nada. Ya está en verde.
+**Límite:** compila, pero no ejecuta la app. Para probarla de verdad, instala
+el artefacto en un teléfono.
 
 ### Opción B — Ampliar la política de red del entorno
 

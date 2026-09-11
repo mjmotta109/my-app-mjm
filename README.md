@@ -149,10 +149,12 @@ MVP funcional. Motor, PWA y API construidos y probados: **209 tests
 automáticos** más una prueba de humo de **30 pasos** en un navegador real
 (Chromium a 390 px, sin errores de consola).
 
-El proyecto Android está armado con Capacitor y apunta a `targetSdk 36`, pero
-**el APK nunca se compiló en este entorno**: la política de red bloquea el SDK
-de Android. Por eso el build vive en CI (`.github/workflows/android.yml`), donde
-sí se verifica y deja un APK descargable. Ver [ANDROID.md](./docs/ANDROID.md).
+El proyecto Android está armado con Capacitor, apunta a `targetSdk 36` y **el
+APK compila en verde en CI** (4,38 MB, descargable como artefacto desde
+Actions). No se compiló en el contenedor de desarrollo porque su política de red
+bloquea el SDK de Android. **Nadie lo ha ejecutado todavía en un dispositivo**:
+que compile no prueba que el botón atrás o el almacenamiento nativo se comporten
+bien. Ver [ANDROID.md](./docs/ANDROID.md).
 
 Lo siguiente, en orden: verificar el esquema real de SIPSA para conectar precios
 de verdad, la prueba cerrada de Play con 12 testers, cuentas con Google Sign-In

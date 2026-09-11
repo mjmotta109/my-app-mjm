@@ -18,6 +18,10 @@ on:
       - "packages/**"
       - "package.json"
       - "package-lock.json"
+      # Los tsconfig de la raíz gobiernan la compilación de todo el monorepo:
+      # dejarlos fuera del filtro hizo que un arreglo de `typecheck` no
+      # disparara el build que lo iba a verificar.
+      - "tsconfig*.json"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 

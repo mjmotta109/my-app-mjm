@@ -381,3 +381,10 @@ como artefacto descargable para instalar en un teléfono real.
 
 Esto también evita un emulador: probar en un teléfono de verdad es más rápido y
 más fiable que pelear con virtualización anidada dentro de un contenedor.
+
+**Valió la pena de inmediato.** El primer build de CI falló en 24 segundos y
+destapó que `npm run typecheck` —el comando que el README le dice al usuario que
+corra— estaba roto desde el primer commit: no existía un `tsconfig.json` raíz.
+No se había notado porque durante todo el desarrollo se invocó `tsc -b` con los
+proyectos explícitos, nunca el script tal como está publicado. CI corre los
+comandos publicados; yo corría los que me convenían.
