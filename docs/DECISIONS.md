@@ -314,3 +314,70 @@ tortillas de trigo, arracacha, mazorca) y ninguno que haya que importar.
 Los tiempos van de 6 a 90 minutos **a propósito**: sin recetas rápidas de
 verdad, el presupuesto de tiempo (D17) no tendría con qué llenar un martes. Los
 desayunos, que eran el punto flojo con 15, pasaron a 29.
+
+---
+
+## D23 — Capacitor en vez de TWA para Android
+
+Una **TWA** (Trusted Web Activity) es más barata de montar, pero exige que la
+PWA esté hospedada en un dominio propio verificado con `assetlinks.json`: la app
+instalada carga la web desde internet.
+
+**Capacitor empaqueta los archivos web DENTRO del APK.** Rinde funciona sin
+servidor y sin red por diseño, así que exigir un dominio y un hosting solo para
+poder instalarla sería inventar una dependencia que el producto no tiene.
+
+Además da acceso a APIs nativas —almacenamiento, botón atrás, barra de estado—
+que una TWA no ofrece.
+
+Costo aceptado: hay que compilar un APK y mantener un proyecto Android en el
+repositorio, en vez de solo publicar una web.
+
+---
+
+## D24 — El almacenamiento pasó a ser asíncrono 🔍
+
+El `localStorage` de un WebView **se puede limpiar sin aviso** cuando Android
+necesita espacio. Perder la despensa y el plan del mes por eso sería grave, así
+que en nativo se usa `SharedPreferences` vía `@capacitor/preferences`.
+
+Ese almacenamiento es asíncrono, y ahí estaba la decisión real. Mantener la API
+síncrona habría exigido una caché en memoria que se desincroniza o escribir en
+dos sitios a la vez. Se asumió la asincronía.
+
+La consecuencia obliga a algo que es fácil pasar por alto: **la app no dibuja
+rutas hasta terminar de hidratar**. Sin ese `ready`, alguien con un plan
+guardado vería la pantalla de bienvenida por un instante —y la ruta protegida lo
+habría redirigido— antes de que llegaran sus datos. Y no se guarda nada antes de
+hidratar, porque escribiría el estado vacío encima de los datos reales.
+
+La interfaz `Storage` que ya existía desde el MVP hizo que esto fuera escribir
+una implementación nueva, sin tocar una sola pantalla.
+
+---
+
+## D25 — El build nativo apaga el service worker
+
+Dentro del APK los archivos ya están en el dispositivo: un service worker no
+aporta nada y sí puede hacer daño. Después de actualizar la app desde Play,
+serviría assets cacheados de la versión anterior y dejaría al usuario con una
+mezcla de dos versiones.
+
+`RINDE_TARGET=native` quita el plugin de PWA del build. La versión web lo sigue
+usando, que es donde sí sirve.
+
+---
+
+## D26 — El APK se compila en CI, no aquí 🔍
+
+El contenedor de desarrollo tiene JDK y Gradle pero **no el SDK de Android**: la
+política de red del entorno bloquea `dl.google.com` con un 403. Es una
+denegación de política, no un fallo transitorio, así que no se reintenta.
+
+En vez de dar por bueno un proyecto Gradle sin compilar, el build vive en
+`.github/workflows/android.yml`, donde el runner sí trae el SDK. El workflow
+verifica que el APK se genere y que no sea sospechosamente pequeño, y lo publica
+como artefacto descargable para instalar en un teléfono real.
+
+Esto también evita un emulador: probar en un teléfono de verdad es más rápido y
+más fiable que pelear con virtualización anidada dentro de un contenedor.

@@ -81,7 +81,11 @@ button { cursor: pointer; }
   padding: 16px 16px calc(var(--nav-alto) + env(safe-area-inset-bottom) + 24px);
 }
 
-.contenido--sin-nav { padding-bottom: 32px; }
+.contenido--sin-nav {
+  padding-bottom: 32px;
+  /* Pantallas sin encabezado: el respiro superior lo pone el contenido. */
+  padding-top: calc(16px + env(safe-area-inset-top));
+}
 
 .encabezado {
   position: sticky;
@@ -90,6 +94,8 @@ button { cursor: pointer; }
   background: color-mix(in srgb, var(--papel) 88%, transparent);
   backdrop-filter: blur(12px);
   padding: 14px 16px 10px;
+  /* En un teléfono con muesca, el encabezado no puede quedar bajo la hora. */
+  padding-top: calc(14px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--linea);
   display: flex;
   align-items: center;

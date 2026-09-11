@@ -23,11 +23,14 @@ rinde/
 │   └── data/     @rinde/data   Catálogo demo: 100 ingredientes, 119 recetas, precios DEMO.
 ├── apps/
 │   ├── web/      @rinde/web    PWA mobile-first (React 19 + Vite 8). El producto.
+│   │   ├── android/            Proyecto nativo (Capacitor 8, targetSdk 36).
+│   │   └── store/              Material de la ficha de Google Play.
 │   └── api/      @rinde/api    Backend REST (Fastify 5 + SQLite).
 └── docs/
     ├── ARCHITECTURE.md   Stack, modelo de datos, PWA, camino a Android.
     ├── DATA_SOURCES.md   De dónde salen (y de dónde NO salen) los precios.
     ├── NUTRICION.md      Anexos: composición de alimentos y necesidades energéticas.
+    ├── ANDROID.md        De PWA a app de Google Play: qué falta y cómo compilar.
     ├── API.md            Contrato REST completo.
     └── DECISIONS.md      Qué se decidió, por qué, y qué costaría revertirlo.
 ```
@@ -45,6 +48,10 @@ npm run dev:web            # http://localhost:5173
 # Tests del motor y de la API
 npm test                   # 209 tests
 npm run typecheck
+
+# Android
+npm run build:native       # compila la web y sincroniza con android/
+npm run icons              # regenera iconos y splash de todas las densidades
 
 # Backend (opcional en el MVP)
 npm run seed:api           # carga el catálogo DEMO en SQLite
@@ -142,6 +149,11 @@ MVP funcional. Motor, PWA y API construidos y probados: **209 tests
 automáticos** más una prueba de humo de **30 pasos** en un navegador real
 (Chromium a 390 px, sin errores de consola).
 
-Lo siguiente, en orden: verificar el esquema real de SIPSA para conectar
-precios de verdad, cuentas con Google Sign-In, empaquetado Android con
-Capacitor y, después de eso, integración con dispositivos.
+El proyecto Android está armado con Capacitor y apunta a `targetSdk 36`, pero
+**el APK nunca se compiló en este entorno**: la política de red bloquea el SDK
+de Android. Por eso el build vive en CI (`.github/workflows/android.yml`), donde
+sí se verifica y deja un APK descargable. Ver [ANDROID.md](./docs/ANDROID.md).
+
+Lo siguiente, en orden: verificar el esquema real de SIPSA para conectar precios
+de verdad, la prueba cerrada de Play con 12 testers, cuentas con Google Sign-In
+y, después de eso, integración con dispositivos.

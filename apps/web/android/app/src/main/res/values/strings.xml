@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rinde</string>
+    <string name="title_activity_main">Rinde</string>
+    <string name="package_name">co.rinde.app</string>
+    <string name="custom_url_scheme">co.rinde.app</string>
+</resources>

@@ -13,3 +13,14 @@ apps/web/dev-dist/
 *.tsbuildinfo
 apps/web/dist-types/
 e2e-shots/
+
+# Android (Capacitor). El proyecto SÍ se versiona; sus artefactos de build no.
+apps/web/android/app/src/main/assets/public/
+apps/web/android/app/src/main/assets/capacitor.config.json
+apps/web/android/app/src/main/assets/capacitor.plugins.json
+apps/web/android/.gradle/
+apps/web/android/local.properties
+apps/web/android/capacitor-cordova-android-plugins/
+*.keystore
+*.jks
+apps/web/android/keystore.properties

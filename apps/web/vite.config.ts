@@ -9,11 +9,21 @@ import { VitePWA } from "vite-plugin-pwa";
  * cualquier subdirectorio o desde el sistema de archivos, que es lo que
  * necesita el empaquetado con Capacitor para Android (§34 del brief).
  */
+/**
+ * `RINDE_TARGET=native` produce el build que va dentro del APK.
+ *
+ * En nativo se APAGA el service worker a propósito: los archivos ya viven en
+ * el dispositivo, así que el SW no aporta nada y sí puede hacer daño —
+ * serviría assets cacheados de la versión anterior después de actualizar la
+ * app desde Play, dejando al usuario con una mezcla de dos versiones.
+ */
+const isNative = process.env["RINDE_TARGET"] === "native";
+
 export default defineConfig({
   base: "./",
   plugins: [
     react(),
-    VitePWA({
+    ...(isNative ? [] : [VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       manifest: {
@@ -61,7 +71,7 @@ export default defineConfig({
         ],
       },
       devOptions: { enabled: false },
-    }),
+    })]),
   ],
   build: {
     target: "es2022",

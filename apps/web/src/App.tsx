@@ -1,5 +1,6 @@
-import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import { hideSplash, onAndroidBack, setupStatusBar } from "./lib/native.js";
 import { BottomNav } from "./components/BottomNav.js";
 import { Landing } from "./screens/Landing.js";
 import { Onboarding } from "./screens/Onboarding.js";
@@ -36,15 +37,47 @@ export function App(): React.JSX.Element {
   );
 }
 
+/** Pantallas desde las que el botón atrás de Android sale de la app. */
+const RAICES = new Set(["/", "/bienvenida"]);
+
 function Shell(): React.JSX.Element {
-  const { state } = useStore();
+  const { state, ready } = useStore();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Cada cambio de pantalla vuelve arriba: en móvil, heredar el scroll de la
   // pantalla anterior desorienta.
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  useEffect(() => {
+    void setupStatusBar();
+  }, []);
+
+  // El splash se oculta cuando ya hay algo real que mostrar.
+  useEffect(() => {
+    if (ready) void hideSplash();
+  }, [ready]);
+
+  // Botón atrás de Android: vuelve a la pantalla anterior; desde una raíz,
+  // sale de la app. Se vuelve a suscribir en cada cambio de ruta porque el
+  // handler necesita saber dónde está.
+  useEffect(() => {
+    return onAndroidBack(() => {
+      if (RAICES.has(location.pathname)) return false;
+      // Una pantalla de detalle abierta directamente (por ejemplo desde una
+      // notificación) no tiene historial atrás: se va al inicio en vez de
+      // dejar al usuario atrapado.
+      if (window.history.length > 1) navigate(-1);
+      else navigate("/", { replace: true });
+      return true;
+    });
+  }, [location.pathname, navigate]);
+
+  // Hasta hidratar no se dibujan rutas: si no, alguien con un plan guardado
+  // vería la bienvenida por un instante antes de que llegaran sus datos.
+  if (!ready) return <div className="app" aria-busy="true" />;
 
   const sinNav = ["/bienvenida", "/inicio"].includes(location.pathname);
 

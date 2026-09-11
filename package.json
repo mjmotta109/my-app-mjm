@@ -19,7 +19,9 @@
     "dev:api": "npm run dev -w @rinde/api",
     "seed:api": "npm run seed -w @rinde/api",
     "e2e": "node apps/web/e2e/smoke.mjs",
-    "build:api": "npm run build -w @rinde/api"
+    "build:api": "npm run build -w @rinde/api",
+    "build:native": "npm run build -w @rinde/core && npm run build -w @rinde/data && npm run build:native -w @rinde/web",
+    "icons": "npm run icons -w @rinde/web"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

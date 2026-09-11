@@ -1,0 +1,77 @@
+name: Android
+
+# Compila el APK de Android.
+#
+# Existe porque el contenedor de desarrollo no puede descargar el SDK de
+# Android (la política de red del entorno bloquea dl.google.com), pero los
+# runners de GitHub sí lo traen preinstalado. Así el build nativo se verifica
+# de verdad en cada cambio, en vez de asumirse.
+#
+# El APK de depuración queda como artefacto descargable: sirve para instalar en
+# un teléfono y probar, sin necesidad de Android Studio.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar tipos y pruebas del motor
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Compilar la web en modo nativo
+        # RINDE_TARGET=native apaga el service worker: dentro del APK los
+        # archivos ya son locales y un SW solo serviría assets viejos tras
+        # actualizar desde Play.
+        run: npm run build:native
+
+      - name: Aceptar licencias del SDK de Android
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+      - name: Compilar el APK de depuración
+        working-directory: apps/web/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Comprobar que el APK existe y no está vacío
+        run: |
+          APK=apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK" || { echo "No se generó el APK"; exit 1; }
+          SIZE=$(stat -c%s "$APK")
+          echo "APK: $SIZE bytes"
+          # Un APK de una app con 119 recetas embebidas no puede pesar 100 KB.
+          test "$SIZE" -gt 1000000 || { echo "APK sospechosamente pequeño"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rinde-debug-apk
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

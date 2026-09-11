@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
+import { createContext, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import type { ReactNode } from "react";
 import {
   cookBatch as cookBatchEngine,
@@ -64,7 +64,8 @@ export type Action =
   | { type: "regeneratePlan" }
   | { type: "toggleChecked"; ingredientId: string }
   | { type: "cookMeal"; mealId: string }
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "hydrate"; data: AppData };
 
 function newId(prefix: string): string {
   // `crypto.randomUUID` no está en todos los navegadores móviles antiguos.
@@ -241,6 +242,11 @@ export function reducer(state: AppData, action: Action): AppData {
       };
     }
 
+    // Carga inicial desde el almacenamiento. Reemplaza el estado entero: no se
+    // mezcla con nada porque antes de hidratar no hay nada del usuario.
+    case "hydrate":
+      return action.data;
+
     case "reset":
       return EMPTY_STATE;
 
@@ -249,8 +255,8 @@ export function reducer(state: AppData, action: Action): AppData {
   }
 }
 
-function load(): AppData {
-  const saved = storage.get<AppData>(STORAGE_KEY);
+async function load(): Promise<AppData> {
+  const saved = await storage.get<AppData>(STORAGE_KEY);
   if (!saved || saved.version !== 1) return EMPTY_STATE;
   return { ...EMPTY_STATE, ...saved };
 }
@@ -258,19 +264,40 @@ function load(): AppData {
 interface StoreValue {
   state: AppData;
   dispatch: (action: Action) => void;
+  /** `false` hasta que se terminó de leer el almacenamiento. */
+  ready: boolean;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [state, dispatch] = useReducer(reducer, undefined, load);
+  const [state, dispatch] = useReducer(reducer, EMPTY_STATE);
+  const [ready, setReady] = useState(false);
 
+  // Hidratación. Hasta que termine, `ready` es falso y la app no dibuja rutas:
+  // sin esto, alguien con un plan guardado vería la pantalla de bienvenida por
+  // un instante antes de que llegaran sus datos.
   useEffect(() => {
-    if (state === EMPTY_STATE) storage.remove(STORAGE_KEY);
-    else storage.set(STORAGE_KEY, state);
-  }, [state]);
+    let vigente = true;
+    void load().then((data) => {
+      if (!vigente) return;
+      if (data !== EMPTY_STATE) dispatch({ type: "hydrate", data });
+      setReady(true);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
-  const value = useMemo(() => ({ state, dispatch }), [state]);
+  // No se guarda antes de hidratar: escribiría el estado vacío encima de los
+  // datos reales del usuario.
+  useEffect(() => {
+    if (!ready) return;
+    if (state === EMPTY_STATE) void storage.remove(STORAGE_KEY);
+    else void storage.set(STORAGE_KEY, state);
+  }, [state, ready]);
+
+  const value = useMemo(() => ({ state, dispatch, ready }), [state, ready]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }
 
