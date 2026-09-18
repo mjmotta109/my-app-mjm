@@ -53,6 +53,9 @@ npm run typecheck
 npm run build:native       # compila la web y sincroniza con android/
 npm run icons              # regenera iconos y splash de todas las densidades
 
+# ¿Solo quieres probarla en el celular? Abre este enlace desde el teléfono:
+# https://github.com/mjmotta109/my-app-mjm/releases/download/preview-apk/rinde-preview.apk
+
 # Backend (opcional en el MVP)
 npm run seed:api           # carga el catálogo DEMO en SQLite
 npm run dev:api            # http://localhost:3000

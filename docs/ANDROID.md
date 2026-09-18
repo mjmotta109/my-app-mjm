@@ -30,8 +30,33 @@ de GitHub sí lo traen.
 | | |
 |---|---|
 | Estado | ✅ verde |
-| Tamaño del APK de depuración | **4,38 MB** |
-| Artefacto | `rinde-debug-apk`, descargable desde la pestaña Actions |
+| Tamaño del APK de depuración | **4,54 MB** |
+| Descarga directa | [`rinde-preview.apk`](https://github.com/mjmotta109/my-app-mjm/releases/download/preview-apk/rinde-preview.apk) |
+| Artefacto (alternativa) | `rinde-debug-apk`, desde la pestaña Actions |
+
+### Instalarlo en un teléfono
+
+```
+https://github.com/mjmotta109/my-app-mjm/releases/download/preview-apk/rinde-preview.apk
+```
+
+Abre ese enlace **desde el celular**. Es un enlace público y permanente: el
+workflow borra y recrea la etiqueta `preview-apk` en cada build, así que siempre
+apunta a la versión más reciente.
+
+Android va a avisar que la app viene de un origen desconocido — es normal, el
+APK está firmado con la llave de depuración, no con una de Play. Acepta instalar
+desde el navegador.
+
+> Los **artefactos de Actions** siguen ahí como alternativa, pero caducan a los
+> 14 días, vienen en `.zip` y exigen iniciar sesión en GitHub. Para un teléfono,
+> el Release es mucho más cómodo.
+
+Verificado sin autenticación: el enlace responde `200` con
+`Content-Type: application/vnd.android.package-archive` y 4.758.293 bytes. El
+APK contiene `AndroidManifest.xml`, `classes.dex`, los 17 archivos web
+embebidos, los 20 iconos de lanzador, firma con APK Signing Block (esquema v2) y
+—como debe ser en nativo— **sin service worker**.
 
 El workflow corre el typecheck y las 216 pruebas antes de compilar, y falla si
 el APK no aparece o es sospechosamente pequeño.
