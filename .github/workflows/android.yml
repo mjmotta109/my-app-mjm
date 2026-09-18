@@ -29,6 +29,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      # Necesario para publicar el Release con el APK adjunto.
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -79,3 +82,53 @@ jobs:
           path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      # Los artefactos de Actions caducan a los 14 días, vienen en un .zip y
+      # exigen iniciar sesión en GitHub. Para instalar en un teléfono eso es
+      # incómodo, así que el mismo APK se publica en un Release con una etiqueta
+      # fija: queda un enlace directo, estable y sin login.
+      - name: Publicar el APK de prueba en un Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA_CORTO=$(git rev-parse --short HEAD)
+          cp apps/web/android/app/build/outputs/apk/debug/app-debug.apk rinde-preview.apk
+
+          # La etiqueta es móvil: siempre apunta al último build de prueba. Se
+          # borra y se recrea para que el tag siga al commit actual.
+          gh release delete preview-apk --yes --cleanup-tag 2>/dev/null || true
+
+          gh release create preview-apk rinde-preview.apk \
+            --target "$GITHUB_SHA" \
+            --title "Rinde — APK de prueba" \
+            --prerelease \
+            --notes "$(cat <<NOTAS
+          **Build de prueba de Rinde.** Commit \`${SHA_CORTO}\`.
+
+          ### Instalar en Android
+
+          1. Abre este enlace desde el celular y descarga \`rinde-preview.apk\`.
+          2. Android va a avisar que la app viene de un origen desconocido.
+             Acepta instalar desde el navegador: es normal, el APK está firmado
+             con la llave de depuración, no con una de Play.
+          3. Ábrela. No pide cuenta ni conexión.
+
+          ### Qué tener en cuenta
+
+          - **Los precios son de demostración**, marcados como tales dentro de la
+            app. No son precios reales de mercado.
+          - Es un build de **depuración**, no de producción: sin optimizar y
+            firmado con la llave de debug.
+          - Todo se guarda solo en tu teléfono. Para borrarlo: Perfil → Borrar
+            todos mis datos.
+
+          Este Release se reemplaza en cada build, así que el enlace siempre trae
+          la versión más reciente.
+          NOTAS
+          )"
+
+          echo "Release publicado:"
+          gh release view preview-apk --json url,assets \
+            --jq '.url, (.assets[] | "  " + .name + " — " + (.size|tostring) + " bytes — " + .url)'
+
