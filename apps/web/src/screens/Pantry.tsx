@@ -43,6 +43,15 @@ export function Pantry(): React.JSX.Element {
           />
         ) : (
           <>
+            {/*
+              La acción principal de esta pantalla. "¿Qué puedo cocinar?" era un
+              destino más en la navegación inferior, lejos del único momento en
+              que alguien se hace esa pregunta: mirando lo que tiene.
+            */}
+            <Link to="/que-puedo-cocinar" className="boton">
+              🍳 ¿Qué puedo cocinar con esto?
+            </Link>
+
             <div className="tarjeta tarjeta--verde">
               <div className="etiqueta">Valor de lo que tienes</div>
               <Money value={valorTotal} size="lg" />
@@ -139,10 +148,6 @@ export function Pantry(): React.JSX.Element {
                 </div>
               </section>
             ))}
-
-            <Link to="/que-puedo-cocinar" className="boton boton--secundario" style={{ marginTop: 8 }}>
-              ¿Qué puedo cocinar con esto?
-            </Link>
           </>
         )}
       </main>

@@ -133,6 +133,34 @@ button { cursor: pointer; }
 
 .tarjeta--plana { padding: 0; overflow: hidden; }
 
+/* Una comida ya cocinada sigue visible pero deja de pedir atención. */
+.tarjeta--hecha { opacity: 0.62; }
+
+/* Fila de accesos secundarios bajo una cabecera: no compiten con la nav. */
+.accesos {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 16px 12px;
+  scrollbar-width: none;
+}
+.accesos::-webkit-scrollbar { display: none; }
+.accesos__item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: var(--tarjeta);
+  color: var(--tinta);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.accesos__item[aria-current="page"] { border-color: var(--verde-borde); background: var(--verde-suave); }
+
 .tarjeta-boton {
   width: 100%;
   text-align: left;
@@ -300,7 +328,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   bottom: 0; left: 0; right: 0;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   background: color-mix(in srgb, var(--tarjeta) 94%, transparent);
   backdrop-filter: blur(16px);
   border-top: 1px solid var(--linea);
@@ -313,13 +341,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px;
   height: var(--nav-alto);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--tinta-tenue);
   text-decoration: none;
 }
 .nav__item[aria-current="page"] { color: var(--verde); }
-.nav__icono { font-size: 19px; line-height: 1; }
+.nav__icono { font-size: 21px; line-height: 1; }
 
 /* -------------------------------------------------------------------- listas */
 

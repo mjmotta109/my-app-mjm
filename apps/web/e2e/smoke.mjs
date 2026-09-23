@@ -111,18 +111,29 @@ await step("agregar básicos y crear plan", async () => {
   await page.getByRole("button", { name: "Lentejas", exact: true }).click();
   await page.getByRole("button", { name: "Huevo", exact: true }).click();
   await page.getByRole("button", { name: "Crear mi plan" }).click();
-  await page.getByText("Mi mes").waitFor({ timeout: 15000 });
+  await page.getByText(/Día 1 de 30/).waitFor({ timeout: 15000 });
   await shot("08-dashboard");
 });
 
-await step("el dashboard muestra presupuesto y gasto proyectado", async () => {
+await step("el inicio enseña qué se come hoy antes que nada", async () => {
   // `innerText` devuelve el texto YA transformado por CSS, y varios títulos
   // van en mayúsculas por `text-transform`. Se compara sin distinguir caja.
   const texto = (await page.locator(".contenido").innerText()).toLowerCase();
-  for (const esperado of ["presupuesto", "$800.000", "gasto proyectado", "comidas", "próxima comida"]) {
-    if (!texto.includes(esperado)) throw new Error(`falta "${esperado}" en el dashboard`);
+  for (const esperado of ["desayuno", "almuerzo", "cena", "lo cociné", "el dinero", "$800.000"]) {
+    if (!texto.includes(esperado)) throw new Error(`falta "${esperado}" en el inicio`);
   }
   if (!texto.includes("datos de demostración")) throw new Error("no advierte que los precios son demo");
+  // Lo que se come va ARRIBA del dinero: es la jerarquía de la pantalla.
+  if (texto.indexOf("desayuno") > texto.indexOf("el dinero")) {
+    throw new Error("el dinero aparece antes que la comida del día");
+  }
+});
+
+await step("el inicio no vuelve a ser un muro de tarjetas", async () => {
+  const enlaces = await page.locator(".tarjeta-boton").count();
+  if (enlaces > 3) throw new Error(`${enlaces} tarjetas-enlace en el inicio; el límite es 3`);
+  const items = await page.locator(".nav__item").count();
+  if (items !== 4) throw new Error(`la navegación tiene ${items} destinos, deberían ser 4`);
 });
 
 await step("el plan respeta el tiempo de cocina declarado", async () => {
@@ -133,6 +144,7 @@ await step("el plan respeta el tiempo de cocina declarado", async () => {
 });
 
 await step("cocinar por adelantado: hay tandas y ahorro de tiempo", async () => {
+  await page.getByRole("link", { name: /Plan/ }).first().click();
   await page.getByRole("link", { name: /Cocinar por adelantado/ }).click();
   await page.getByRole("heading", { name: "Cocinar por adelantado" }).waitFor();
   const texto = (await page.locator(".contenido").innerText()).toLowerCase();
@@ -179,7 +191,7 @@ await step("cocinar descuenta inventario", async () => {
   await page.getByRole("button", { name: /Lo cociné/ }).click();
   await page.getByText("Listo, inventario actualizado").waitFor();
   await shot("14-cocinado");
-  await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page.getByRole("button", { name: /^Cerrar / }).click();
 });
 
 await step("mercado", async () => {
@@ -211,7 +223,8 @@ await step("¿qué puedo cocinar?", async () => {
 });
 
 await step("recetas muestran tiempo y dificultad y se pueden filtrar", async () => {
-  await page.getByRole("link", { name: /Recetas/ }).first().click();
+  await page.getByRole("link", { name: /Plan/ }).first().click();
+  await page.getByRole("link", { name: /Recetario/ }).click();
   await page.getByRole("heading", { name: "Recetas" }).waitFor();
   const texto = await page.locator(".contenido").innerText();
   if (!/⏱ \d+ min/.test(texto)) throw new Error("el índice no muestra el tiempo");
@@ -231,17 +244,33 @@ await step("recetas muestran tiempo y dificultad y se pueden filtrar", async () 
   await page.waitForTimeout(200);
 });
 
-await step("perfil", async () => {
-  await page.getByRole("link", { name: /Perfil/ }).first().click();
-  await page.getByRole("heading", { name: "Perfil" }).waitFor();
-  await shot("20-perfil");
+await step("ajustes se abren desde el engranaje y vienen agrupados", async () => {
+  await page.getByRole("link", { name: "Hoy" }).first().click();
+  await page.getByRole("link", { name: "Ajustes" }).click();
+  await page.getByRole("heading", { name: "Ajustes" }).waitFor();
+  const texto = (await page.locator(".contenido").innerText()).toLowerCase();
+  if (!texto.includes("mi hogar")) throw new Error("no abre en el grupo de hogar");
+  // Los ajustes de cocina NO están en el mismo scroll: ese era el problema.
+  if (texto.includes("tiempo de cocina")) throw new Error("las once secciones siguen en un solo scroll");
+  await shot("20-ajustes");
+});
+
+await step("cada grupo de ajustes trae lo suyo y nada más", async () => {
+  await page.getByRole("button", { name: /Cómo cocino/ }).click();
+  const cocina = (await page.locator(".contenido").innerText()).toLowerCase();
+  if (!cocina.includes("tiempo de cocina")) throw new Error("falta el tiempo de cocina");
+  if (cocina.includes("privacidad")) throw new Error("mezcla la privacidad con la cocina");
+  await page.getByRole("button", { name: /La app/ }).click();
+  const app = (await page.locator(".contenido").innerText()).toLowerCase();
+  if (!app.includes("precios") || !app.includes("privacidad")) throw new Error("falta precios o privacidad");
+  await shot("20b-ajustes-app");
 });
 
 await step("panel de precios explica la procedencia", async () => {
   await page.getByRole("button", { name: /Origen de los precios/ }).click();
   await page.getByText("¿Por qué no hay precios reales?").waitFor();
   await shot("21-precios");
-  await page.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await page.getByRole("button", { name: /^Cerrar / }).click();
 });
 
 await step("estado físico estima necesidades y advierte que es opcional", async () => {
@@ -274,7 +303,7 @@ await step("rinde más", async () => {
 
 await step("el estado sobrevive a recargar (persistencia local)", async () => {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  await page.getByText("Mi mes").waitFor({ timeout: 8000 });
+  await page.getByText(/Día 1 de 30/).waitFor({ timeout: 8000 });
   await shot("24-persistencia");
 });
 

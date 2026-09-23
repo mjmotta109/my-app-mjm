@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
-  formatCop, formatDayLong, nutritionOfScaled, scaleRecipe, suggestForRecipe,
+  formatCop, formatDayLong, scaleRecipe, suggestForRecipe,
   detectLeftovers, suggestLeftoverUses,
 } from "@rinde/core";
 import { INGREDIENT_BY_ID, PRICES, RECIPES, SLOT_LABEL, getRecipe, ingredientName } from "../lib/catalog.js";
@@ -29,7 +29,10 @@ export function MealDetail(): React.JSX.Element {
   }
 
   const scale = scaleRecipe(recipe, meal.servings, INGREDIENT_BY_ID);
-  const nutrition = nutritionOfScaled(scale, INGREDIENT_BY_ID);
+  // El aporte lo trae la comida, no se recalcula desde la receta del catálogo:
+  // si el planificador cambió un ingrediente, la receta original ya no describe
+  // lo que se va a cocinar.
+  const nutrition = meal.nutrition;
   const cantidades = new Map(scale.lines.map((line) => [line.ingredientId, line.qtyBase]));
   const sustituciones = suggestForRecipe(recipe, cantidades, INGREDIENT_BY_ID, PRICES, {
     minSavingCop: 300,
@@ -49,6 +52,16 @@ export function MealDetail(): React.JSX.Element {
       <Header title={recipe.name} eyebrow={`${SLOT_LABEL[meal.slot]} · ${formatDayLong(meal.date)}`} back />
       <main className="contenido pila pila--lg">
         <p className="media">{recipe.description}</p>
+
+        {meal.substitutions.length > 0 && (
+          <Notice tone="info">
+            <strong>Esta comida lleva cambios</strong> para que el plan cupiera en tu presupuesto:{" "}
+            {meal.substitutions
+              .map((c) => `${ingredientName(c.fromIngredientId)} → ${ingredientName(c.toIngredientId)}`)
+              .join(", ")}
+            . La lista de ingredientes de abajo es la que vas a cocinar.
+          </Notice>
+        )}
 
         <div className="malla-3">
           <Card><div className="etiqueta">Tiempo</div><div className="cifra cifra--md">{recipe.minutes} min</div></Card>
@@ -78,7 +91,12 @@ export function MealDetail(): React.JSX.Element {
         <section>
           <DemoNotice show={meal.lines.some((line) => line.priceIsDemo)} />
 
-        <div className="grupo-titulo"><span>Ingredientes</span><span className="tenue" style={{ textTransform: "none", letterSpacing: 0 }}>para {meal.servings}</span></div>
+          <div className="grupo-titulo">
+            <span>Ingredientes</span>
+            <span className="tenue" style={{ textTransform: "none", letterSpacing: 0 }}>
+              para {meal.servings}
+            </span>
+          </div>
           <div className="tarjeta tarjeta--plana">
             <div className="lista">
               {meal.lines.map((line) => (

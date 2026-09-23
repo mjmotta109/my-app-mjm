@@ -1,20 +1,44 @@
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import {
-  averageCostPerMealPerPerson, buildShoppingList, cycleCount, formatCop, formatDayShort,
+  averageCostPerMealPerPerson, buildShoppingList, cycleCount, formatCop, formatDayLong,
 } from "@rinde/core";
+import type { Meal } from "@rinde/core";
 import { CATEGORIES, INGREDIENT_BY_ID, PRICES, SLOT_LABEL, getRecipe } from "../lib/catalog.js";
-import { useStore } from "../state/store.js";
-import { Card, Money, Notice, Progress } from "../components/ui.js";
+import { today, useStore } from "../state/store.js";
+import { Card, Header, Money, Notice, Progress } from "../components/ui.js";
 
 /**
- * Pantalla 3: dashboard (§6, §29.3).
+ * Pantalla de inicio: **Hoy** (§6, §29.3).
  *
- * Orden de la información, según §30: cuánto dinero tengo → cuánto voy a
- * gastar → qué voy a comer → qué tengo → qué necesito comprar.
+ * Antes era un tablero: cuatro cifras sueltas y cinco tarjetas-enlace, todas
+ * del mismo tamaño y compitiendo entre sí. Abrir la app era elegir entre nueve
+ * cosas antes de saber qué hay que hacer.
+ *
+ * Ahora la pantalla responde una pregunta, en este orden:
+ *
+ *   1. ¿Qué como hoy?  — las comidas del día, con su botón de cocinar.
+ *   2. ¿Cómo va el dinero? — una tarjeta, no cuatro cifras.
+ *   3. ¿Algo que atender? — solo lo que de verdad requiere acción hoy.
+ *
+ * Lo que se fue: las tarjetas de "cocinar por adelantado" (vive en Plan),
+ * "¿qué puedo cocinar?" (vive en Despensa, que es donde se está cuando surge la
+ * pregunta) y las cifras de comidas/personas/días, que no cambian nunca y por
+ * tanto no son información: son decoración.
  */
 export function Dashboard(): React.JSX.Element {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const { household, plan, inventory } = state;
+
+  const dias = useMemo(() => {
+    const mapa = new Map<string, Meal[]>();
+    for (const meal of plan?.meals ?? []) {
+      const lista = mapa.get(meal.date);
+      if (lista) lista.push(meal);
+      else mapa.set(meal.date, [meal]);
+    }
+    return [...mapa.entries()];
+  }, [plan]);
 
   if (!household || !plan) {
     return (
@@ -29,185 +53,223 @@ export function Dashboard(): React.JSX.Element {
   const excedido = disponible < 0;
   const usoPct = household.budgetCop > 0 ? plan.projectedSpendCop / household.budgetCop : 0;
 
-  const proxima = plan.meals.find((meal) => meal.status !== "cooked") ?? plan.meals[0];
-  const recetaProxima = proxima ? getRecipe(proxima.recipeId) : undefined;
+  // El día que toca no es la fecha del calendario sino el primero que queda
+  // sin cocinar: si ayer no cocinaste, hoy sigue siendo ayer. Es lo que la
+  // persona tiene delante, no lo que dice el reloj.
+  const indiceDia = Math.max(0, dias.findIndex(([, comidas]) => comidas.some((m) => m.status !== "cooked")));
+  const entrada = dias[indiceDia];
+  const fechaDia = entrada?.[0];
+  const comidasDia = entrada?.[1] ?? [];
+  const esFechaDeHoy = fechaDia === today();
+  const siguiente = comidasDia.find((meal) => meal.status !== "cooked");
 
   const cicloActual = siguienteCiclo(plan.startDate, plan.days);
   const lista = buildShoppingList(plan, INGREDIENT_BY_ID, PRICES, {
-    cycle: cicloActual,
-    categories: CATEGORIES,
+    cycle: cicloActual, categories: CATEGORIES,
   });
-
+  const comprados = new Set(state.checkedIngredientIds);
+  const porComprar = lista.groups
+    .flatMap((grupo) => grupo.items)
+    .filter((item) => !comprados.has(item.ingredientId)).length;
   const promedio = averageCostPerMealPerPerson(plan.totalFoodValueCop, plan.meals.length, personas);
+  const cocinadas = plan.meals.filter((m) => m.status === "cooked").length;
 
   return (
-    <main className="contenido pila pila--lg">
-      <div>
-        <div className="encabezado__eyebrow" style={{ marginBottom: 4 }}>Mi mes</div>
-        <h1>{plan.days} días por delante</h1>
-      </div>
+    <>
+      <Header
+        title={esFechaDeHoy ? "Hoy" : fechaDia ? formatDayLong(fechaDia) : "Tu plan"}
+        eyebrow={`Día ${indiceDia + 1} de ${plan.days} · ${cocinadas} de ${plan.meals.length} cocinadas`}
+        action={
+          <Link to="/perfil" className="boton-icono" aria-label="Ajustes">
+            <span aria-hidden="true">⚙️</span>
+          </Link>
+        }
+      />
+      <main className="contenido pila pila--lg">
 
-      {/* ---------------------------------------------------- presupuesto */}
-      <Card tone="verde">
-        <div className="etiqueta">Presupuesto</div>
-        <Money value={household.budgetCop} size="xl" />
+        {/* ============================================ 1. qué se come hoy */}
+        <section className="pila">
+          {comidasDia.length === 0 ? (
+            <Card>
+              <h3>Cocinaste todo el plan</h3>
+              <p className="pequeno tenue" style={{ marginTop: 6 }}>
+                Ya no quedan comidas pendientes. Genera un plan nuevo desde Plan.
+              </p>
+            </Card>
+          ) : (
+            comidasDia.map((meal) => (
+              <ComidaDelDia
+                key={meal.id}
+                meal={meal}
+                // Solo la siguiente comida pendiente lleva el botón principal.
+                // Tres botones verdes idénticos vuelven a poner a la persona a
+                // elegir, que es justo lo que esta pantalla evita.
+                esLaSiguiente={meal.id === siguiente?.id}
+                onCocinar={() => dispatch({ type: "cookMeal", mealId: meal.id })}
+              />
+            ))
+          )}
+          {!esFechaDeHoy && fechaDia && (
+            <p className="diminuto tenue">
+              Tu plan corre sobre las fechas del catálogo de demostración, no sobre el calendario
+              real. Por eso este día no coincide con la fecha de tu teléfono.
+            </p>
+          )}
+        </section>
 
-        <div style={{ margin: "16px 0 10px" }}>
-          <Progress
-            value={plan.projectedSpendCop}
-            max={household.budgetCop}
-            tone={excedido ? "alerta" : usoPct > 0.9 ? "aviso" : "ok"}
-          />
-        </div>
-
-        <div className="fila fila--entre">
-          <div>
-            <div className="etiqueta">Gasto proyectado</div>
-            <Money value={plan.projectedSpendCop} size="lg" />
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="etiqueta">{excedido ? "Te falta" : "Disponible"}</div>
-            <span className={`cifra cifra--lg ${excedido ? "negativo" : ""}`}>
-              {formatCop(Math.abs(disponible))}
-            </span>
-          </div>
-        </div>
-      </Card>
-
-      {excedido && (
-        <Notice tone="alerta">
-          <strong>El plan no cabe en tu presupuesto.</strong> Rinde ya intentó abaratarlo con las
-          recetas y los precios disponibles. Puedes subir el presupuesto, reducir los días o
-          quitar una comida del día en Perfil.
-        </Notice>
-      )}
-
-      {plan.diagnostics.warnings.some((warning) => /demostración/i.test(warning)) && (
-        <Notice tone="demo">
-          <strong>Datos de demostración.</strong> Los precios no son reales; sirven para probar la
-          aplicación. Ver Perfil → Precios.
-        </Notice>
-      )}
-
-      {/* --------------------------------------------------------- cifras */}
-      <div className="malla-2">
-        <Card>
-          <div className="etiqueta">Comidas</div>
-          <div className="cifra cifra--lg">{plan.meals.length}</div>
-        </Card>
-        <Card>
-          <div className="etiqueta">Personas</div>
-          <div className="cifra cifra--lg">{personas}</div>
-        </Card>
-        <Card>
-          <div className="etiqueta">Días</div>
-          <div className="cifra cifra--lg">{plan.days}</div>
-        </Card>
-        <Card>
-          <div className="etiqueta">Costo promedio</div>
-          <Money value={promedio} size="lg" />
-          <div className="diminuto tenue">por comida / persona</div>
-        </Card>
-      </div>
-
-      {/* -------------------------------------------------- próxima comida */}
-      {proxima && recetaProxima && (
-        <div>
-          <div className="grupo-titulo"><span>Próxima comida</span></div>
-          <Card>
-            <div className="fila fila--entre" style={{ alignItems: "flex-start" }}>
-              <div className="crecer">
-                <h3>{recetaProxima.name}</h3>
-                <p className="pequeno tenue">
-                  {SLOT_LABEL[proxima.slot]} · {formatDayShort(proxima.date)}
-                </p>
+        {/* ================================================== 2. el dinero */}
+        <section>
+          <div className="grupo-titulo"><span>El dinero</span></div>
+          <Card tone={excedido ? "blanco" : "verde"}>
+            <div className="fila fila--entre">
+              <div>
+                <div className="etiqueta">Gasto proyectado del mes</div>
+                <Money value={plan.projectedSpendCop} size="xl" />
               </div>
               <div style={{ textAlign: "right" }}>
-                <Money value={proxima.costCop} size="md" />
-                <div className="diminuto tenue">
-                  {formatCop(proxima.costPerPersonCop)} / persona
-                </div>
+                <div className="etiqueta">{excedido ? "Te falta" : "Disponible"}</div>
+                <span className={`cifra cifra--lg ${excedido ? "negativo" : ""}`}>
+                  {formatCop(Math.abs(disponible))}
+                </span>
               </div>
             </div>
-            <Link
-              to={`/comida/${encodeURIComponent(proxima.id)}`}
-              className="boton boton--secundario"
-              style={{ marginTop: 14 }}
-            >
-              Ver receta
-            </Link>
+            <div style={{ margin: "14px 0 8px" }}>
+              <Progress
+                value={plan.projectedSpendCop}
+                max={household.budgetCop}
+                tone={excedido ? "alerta" : usoPct > 0.9 ? "aviso" : "ok"}
+              />
+            </div>
+            <div className="fila fila--entre pequeno tenue">
+              <span>Presupuesto {formatCop(household.budgetCop)}</span>
+              <span>{promedio === null ? "—" : `${formatCop(promedio)} por comida y persona`}</span>
+            </div>
           </Card>
+        </section>
+
+        {/* ========================================= 3. solo lo que requiere acción */}
+        {excedido && (
+          <Notice tone="alerta">
+            <strong>Faltan {formatCop(Math.abs(disponible))} para este plan.</strong> Rinde ya lo
+            abarató todo lo que pudo sin servir de menos ni repetir el mismo plato toda la semana.
+            Lo que queda está en tus manos: subir el presupuesto, quitar una comida del día o
+            reducir los días, en Ajustes.
+          </Notice>
+        )}
+
+        {plan.diagnostics.mealsBelowNutritionFloor > 0 && (
+          <Notice tone="alerta">
+            <strong>{plan.diagnostics.mealsBelowNutritionFloor} comida(s) quedan cortas</strong> frente
+            al mínimo de su horario. No había recetas compatibles más sustanciosas; revisa tus
+            restricciones o el tiempo de cocina en Ajustes.
+          </Notice>
+        )}
+
+        {plan.diagnostics.warnings.some((warning) => /demostración/i.test(warning)) && (
+          <Notice tone="demo">
+            <strong>Datos de demostración.</strong> Los precios no son reales; sirven para probar la
+            aplicación. Ver Ajustes → Precios.
+          </Notice>
+        )}
+
+        <section>
+          <div className="grupo-titulo"><span>Estado</span></div>
+          <div className="pila">
+            <Link to="/mercado" className="tarjeta-boton">
+              <span aria-hidden="true" style={{ fontSize: 22 }}>🛒</span>
+              <span className="crecer">
+                <strong>Mercado</strong>
+                <div className="pequeno tenue">
+                  Compra {cicloActual} de {cycleCount(plan)} · {porComprar} por comprar
+                </div>
+              </span>
+              <span className="fila" style={{ gap: 8 }}>
+                <Money value={lista.totalCop} size="md" />
+                <span className="tenue" aria-hidden="true">›</span>
+              </span>
+            </Link>
+
+            <Link to="/despensa" className="tarjeta-boton">
+              <span aria-hidden="true" style={{ fontSize: 22 }}>🧺</span>
+              <span className="crecer">
+                <strong>Despensa</strong>
+                <div className="pequeno tenue">
+                  {inventory.length} {inventory.length === 1 ? "ingrediente" : "ingredientes"}
+                </div>
+              </span>
+              <span className="tenue" aria-hidden="true">›</span>
+            </Link>
+
+            {!excedido && disponible > 0 && (
+              <Link to="/rinde-mas" className="tarjeta-boton">
+                <span aria-hidden="true" style={{ fontSize: 22 }}>✨</span>
+                <span className="crecer">
+                  <strong>Rinde más</strong>
+                  <div className="pequeno tenue">
+                    Te sobran {formatCop(disponible)}. Mira en qué rinden más.
+                  </div>
+                </span>
+                <span className="tenue" aria-hidden="true">›</span>
+              </Link>
+            )}
+          </div>
+        </section>
+
+          <p className="diminuto tenue">
+            Plan generado con una heurística ({plan.plannerVersion}), no con un optimizador
+            matemático: es un plan bueno, no necesariamente el mejor posible.
+          </p>
+      </main>
+    </>
+  );
+}
+
+/** Una comida del día, con lo único que se hace con ella: verla o cocinarla. */
+function ComidaDelDia({
+  meal, esLaSiguiente, onCocinar,
+}: {
+  meal: Meal;
+  esLaSiguiente: boolean;
+  onCocinar: () => void;
+}): React.JSX.Element {
+  const receta = getRecipe(meal.recipeId);
+  const cocinada = meal.status === "cooked";
+
+  return (
+    <Card className={cocinada ? "tarjeta--hecha" : ""}>
+      <div className="fila fila--entre" style={{ alignItems: "flex-start", gap: 12 }}>
+        <div className="crecer">
+          <div className="etiqueta">{SLOT_LABEL[meal.slot]}</div>
+          <h3 style={{ marginTop: 2 }}>{receta?.name ?? meal.recipeId}</h3>
+          <p className="pequeno tenue" style={{ marginTop: 4 }}>
+            {receta ? `${receta.minutes} min · ` : ""}
+            {Math.round(meal.nutrition.kcal / Math.max(1, meal.servings))} kcal por porción
+            {" · "}
+            {formatCop(meal.costPerPersonCop)} por persona
+          </p>
+          {meal.substitutions.length > 0 && (
+            <p className="diminuto tenue" style={{ marginTop: 4 }}>
+              Con cambios para ajustar el presupuesto. Los verás en la receta.
+            </p>
+          )}
         </div>
-      )}
-
-      {/* --------------------------------------------- despensa y mercado */}
-      <div className="pila">
-        <Link to="/despensa" className="tarjeta-boton">
-          <span aria-hidden="true" style={{ fontSize: 22 }}>🧺</span>
-          <span className="crecer">
-            <strong>Inventario</strong>
-            <div className="pequeno tenue">
-              {inventory.length} {inventory.length === 1 ? "ingrediente" : "ingredientes"}
-            </div>
-          </span>
-          <span className="tenue" aria-hidden="true">›</span>
+      </div>
+      <div className="fila" style={{ gap: 8, marginTop: 14 }}>
+        <Link to={`/comida/${encodeURIComponent(meal.id)}`} className="boton boton--secundario crecer">
+          Ver receta
         </Link>
-
-        <Link to="/mercado" className="tarjeta-boton">
-          <span aria-hidden="true" style={{ fontSize: 22 }}>🛒</span>
-          <span className="crecer">
-            <strong>Mercado</strong>
-            <div className="pequeno tenue">
-              Compra {cicloActual} de {cycleCount(plan)}
-            </div>
-          </span>
-          <span className="fila" style={{ gap: 8 }}>
-            <Money value={lista.totalCop} size="md" />
-            <span className="tenue" aria-hidden="true">›</span>
-          </span>
-        </Link>
-
-        <Link to="/cocinar-adelantado" className="tarjeta-boton">
-          <span aria-hidden="true" style={{ fontSize: 22 }}>🍲</span>
-          <span className="crecer">
-            <strong>Cocinar por adelantado</strong>
-            <div className="pequeno tenue">
-              {household.mealPrep?.enabled
-                ? "Tu plan está armado por tandas"
-                : "Cocina dos veces y resuelve la semana"}
-            </div>
-          </span>
-          <span className="tenue" aria-hidden="true">›</span>
-        </Link>
-
-        <Link to="/que-puedo-cocinar" className="tarjeta-boton">
-          <span aria-hidden="true" style={{ fontSize: 22 }}>🍳</span>
-          <span className="crecer">
-            <strong>¿Qué puedo cocinar?</strong>
-            <div className="pequeno tenue">Con lo que hay en la despensa</div>
-          </span>
-          <span className="tenue" aria-hidden="true">›</span>
-        </Link>
-
-        {!excedido && disponible > 0 && (
-          <Link to="/rinde-mas" className="tarjeta-boton">
-            <span aria-hidden="true" style={{ fontSize: 22 }}>✨</span>
-            <span className="crecer">
-              <strong>Rinde más</strong>
-              <div className="pequeno tenue">
-                Te sobran {formatCop(disponible)}. Mira en qué rinden más.
-              </div>
-            </span>
-            <span className="tenue" aria-hidden="true">›</span>
-          </Link>
+        {!cocinada && (
+          <button
+            type="button"
+            className={`boton crecer${esLaSiguiente ? "" : " boton--secundario"}`}
+            onClick={onCocinar}
+          >
+            Lo cociné
+          </button>
         )}
       </div>
-
-      <p className="diminuto tenue">
-        Plan generado con una heurística ({plan.plannerVersion}), no con un optimizador
-        matemático: es un plan bueno, no necesariamente el mejor posible.
-      </p>
-    </main>
+      {cocinada && <p className="diminuto tenue" style={{ marginTop: 10 }}>✓ Cocinada y descontada de la despensa</p>}
+    </Card>
   );
 }
 

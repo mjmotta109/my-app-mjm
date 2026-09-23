@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { formatCop, formatDayLong, formatDayShort } from "@rinde/core";
 import type { Meal } from "@rinde/core";
 import { SLOT_LABEL, getRecipe } from "../lib/catalog.js";
@@ -55,11 +55,32 @@ export function PlanScreen(): React.JSX.Element {
           </button>
         }
       />
+      {/*
+        Los dos destinos que antes ocupaban un puesto en la navegación inferior
+        y una tarjeta en el inicio. Aquí es donde se buscan: el recetario, para
+        ver qué más hay; cocinar por adelantado, para resolver la semana de una
+        vez. Son accesos, no decisiones que haya que tomar todos los días.
+      */}
+      <nav className="accesos" aria-label="Herramientas del plan">
+        <NavLink to="/recetas" className="accesos__item">
+          <span aria-hidden="true">📖</span> Recetario
+        </NavLink>
+        <NavLink to="/cocinar-adelantado" className="accesos__item">
+          <span aria-hidden="true">🍲</span> Cocinar por adelantado
+        </NavLink>
+      </nav>
       <main className="contenido pila" ref={contenedor}>
         {cocinadas > 0 && (
           <Notice tone="info">
             Ya cocinaste {cocinadas} de {plan.meals.length} comidas.
           </Notice>
+        )}
+
+        {plan.diagnostics.distinctRecipes > 0 && (
+          <p className="diminuto tenue">
+            {plan.diagnostics.distinctRecipes} recetas distintas en {plan.days} días. Ninguna se
+            repite más de una vez por semana ni dos veces el mismo día.
+          </p>
         )}
 
         {porDia.map(([fecha, comidas]) => (

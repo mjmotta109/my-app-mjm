@@ -492,3 +492,66 @@ Recordatorio: **los precios de demostración no son precios reales de mercado**,
 así que esa cifra no es una afirmación sobre lo que cuesta comer en Colombia.
 Es lo que cuesta con los datos que la app trae dentro, y está etiquetada como
 tal en todas partes.
+
+---
+
+## D30 — Cuatro destinos, no seis; una pregunta por pantalla 🧭
+
+> "Lo que hay ahora mismo no es claro. Está desorganizado y me das demasiadas
+> opciones todo el tiempo. Necesito aterrizar las cosas."
+
+Tenía razón, y se puede contar: al abrir la app había **seis destinos** en la
+navegación inferior y, dentro del inicio, **cuatro cifras sueltas y cinco
+tarjetas-enlace**, todas del mismo tamaño. Quince cosas al mismo nivel antes de
+saber qué hay que hacer hoy. Y lo que de verdad hacía falta —qué se come— no
+estaba: el inicio mostraba "próxima comida", una sola, sin poder cocinarla.
+
+### La navegación distingue dos cosas que antes mezclaba
+
+Lugares donde se *hace* algo a diario, y lugares donde se entra de vez en
+cuando. Solo los primeros merecen un puesto permanente:
+
+| Antes (6) | Ahora (4) |
+|---|---|
+| Inicio · Plan · Mercado · Despensa · Recetas · Perfil | **Hoy · Plan · Mercado · Despensa** |
+
+- **Recetario** y **cocinar por adelantado** viven en la cabecera de Plan, que
+  es desde donde se buscan.
+- **Ajustes** (antes "Perfil") es un engranaje en la cabecera de Hoy. Se toca
+  una vez y no se vuelve.
+- **"¿Qué puedo cocinar?"** es ahora el botón principal de Despensa. Era un
+  destino de primer nivel, lejos del único momento en que alguien se hace esa
+  pregunta: mirando lo que tiene.
+- **"Rinde más"** solo aparece cuando de verdad sobra dinero.
+
+### El inicio responde una pregunta, en orden
+
+1. **¿Qué como hoy?** Las comidas del día, cada una con su botón de cocinar. El
+   día que toca no es la fecha del calendario sino el primero que queda sin
+   cocinar: si ayer no cocinaste, hoy sigue siendo ayer.
+2. **¿Cómo va el dinero?** Una tarjeta, no cuatro cifras.
+3. **¿Algo que atender?** Solo lo que requiere acción: presupuesto excedido,
+   comidas bajo el piso, aviso de datos demo.
+
+Se fueron las cifras de comidas/personas/días: no cambian nunca, así que no son
+información, son decoración. Solo la siguiente comida pendiente lleva el botón
+principal; las otras dos lo llevan secundario. Tres botones verdes idénticos
+vuelven a poner a la persona a elegir, que es lo que esta pantalla evita.
+
+### Once secciones de ajustes en tres grupos
+
+`Mi hogar` (quiénes son, cuánto hay, qué comidas) · `Cómo cocino` (tiempo,
+tandas, nutrición, alergias) · `La app` (precios, datos, suscripción,
+privacidad). Cada grupo cabe de un vistazo y su nombre dice de antemano si lo
+que se busca está ahí.
+
+### Lo que la comida enseña ahora
+
+El detalle de una comida ya no recalcula la nutrición desde la receta del
+catálogo: usa `meal.nutrition`, que describe lo que se va a cocinar de verdad.
+Y si el planificador cambió algún ingrediente, lo dice arriba, antes de la
+lista, en vez de servirlo callado (D28).
+
+Las 32 pruebas de recorrido pasan, incluidas dos nuevas que fijan la estructura:
+el inicio no puede volver a pasar de tres tarjetas-enlace, y la comida del día
+tiene que aparecer antes que el dinero.

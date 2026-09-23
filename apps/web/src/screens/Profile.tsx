@@ -11,12 +11,30 @@ import { DEMO_PRICES } from "@rinde/data";
 import { useStore } from "../state/store.js";
 import { Badge, Card, Counter, Header, Notice, Sheet, Toggle } from "../components/ui.js";
 
+type GrupoId = "hogar" | "cocina" | "app";
+
+/**
+ * Los tres grupos de ajustes.
+ *
+ *   - hogar:  quiénes son, cuánto hay, qué comidas del día. Se toca al empezar
+ *             y casi nunca después.
+ *   - cocina: tiempo disponible, tandas, nutrición, alergias. Lo que cambia
+ *             cuando cambia la vida de la persona.
+ *   - app:    precios, datos, suscripción, privacidad. Nada que ver con comer.
+ */
+const GRUPOS: readonly { id: GrupoId; label: string; icon: string }[] = [
+  { id: "hogar", label: "Mi hogar", icon: "🏠" },
+  { id: "cocina", label: "Cómo cocino", icon: "🍳" },
+  { id: "app", label: "La app", icon: "⚙️" },
+];
+
 /** Pantalla 11: perfil y configuración (§29.11, §27, §28). */
 export function Profile(): React.JSX.Element {
   const { state, dispatch } = useStore();
   const navigate = useNavigate();
   const [verPrecios, setVerPrecios] = useState(false);
   const [verAlergias, setVerAlergias] = useState(false);
+  const [grupo, setGrupo] = useState<GrupoId>("hogar");
 
   const household = state.household;
   if (!household) {
@@ -43,8 +61,27 @@ export function Profile(): React.JSX.Element {
 
   return (
     <>
-      <Header title="Perfil" eyebrow="Tu hogar y tus preferencias" />
+      <Header title="Ajustes" eyebrow="Tu hogar y tus preferencias" />
+      {/*
+        Once secciones en un solo scroll obligaban a leerlas todas para
+        encontrar una. Agrupadas en tres, cada pantalla cabe de un vistazo y
+        el nombre del grupo dice de antemano si lo que se busca está ahí.
+      */}
+      <nav className="accesos" aria-label="Secciones de ajustes">
+        {GRUPOS.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            className="accesos__item"
+            aria-current={grupo === g.id ? "page" : undefined}
+            onClick={() => setGrupo(g.id)}
+          >
+            <span aria-hidden="true">{g.icon}</span> {g.label}
+          </button>
+        ))}
+      </nav>
       <main className="contenido pila pila--lg">
+        {grupo === "hogar" && (<>
         {/* ------------------------------------------------------- hogar */}
         <section>
           <div className="grupo-titulo"><span>Mi hogar</span></div>
@@ -124,7 +161,9 @@ export function Profile(): React.JSX.Element {
             ))}
           </div>
         </section>
+        </>)}
 
+        {grupo === "cocina" && (<>
         {/* ------------------------------------------- tiempo de cocina */}
         <section>
           <div className="grupo-titulo"><span>Tiempo de cocina</span></div>
@@ -217,7 +256,9 @@ export function Profile(): React.JSX.Element {
             error en el catálogo o una receta preparada por otra persona pueden contener trazas.
           </Notice>
         </section>
+        </>)}
 
+        {grupo === "app" && (<>
         {/* ----------------------------------------------------- precios */}
         <section>
           <div className="grupo-titulo"><span>Precios</span></div>
@@ -233,7 +274,7 @@ export function Profile(): React.JSX.Element {
 
         {/* ------------------------------------------------------- plan */}
         <section>
-          <div className="grupo-titulo"><span>Tu plan</span></div>
+          <div className="grupo-titulo"><span>Tus datos</span></div>
           <div className="pila">
             <button
               type="button"
@@ -263,7 +304,7 @@ export function Profile(): React.JSX.Element {
 
         {/* --------------------------------------------------- freemium */}
         <section>
-          <div className="grupo-titulo"><span>Tu plan de Rinde</span><Badge tone="verde">{household.tier === "premium" ? "Premium" : "Gratis"}</Badge></div>
+          <div className="grupo-titulo"><span>Suscripción</span><Badge tone="verde">{household.tier === "premium" ? "Premium" : "Gratis"}</Badge></div>
           <Card>
             <div className="pila">
               {(Object.keys(FEATURE_LABELS) as Feature[]).map((feature) => (
@@ -294,10 +335,13 @@ export function Profile(): React.JSX.Element {
             <p className="diminuto tenue" style={{ marginTop: 12 }}>{NUTRITION_DISCLAIMER}</p>
           </Card>
         </section>
+        </>)}
 
-        <p className="diminuto tenue" style={{ textAlign: "center" }}>
-          Rinde · MVP · catálogo con fecha de referencia {CATALOG_AS_OF}
-        </p>
+        {grupo === "app" && (
+          <p className="diminuto tenue" style={{ textAlign: "center" }}>
+            Rinde · MVP · catálogo con fecha de referencia {CATALOG_AS_OF}
+          </p>
+        )}
 
         <Sheet open={verAlergias} onClose={() => setVerAlergias(false)} title="Alergias y restricciones">
           <p className="pequeno media" style={{ marginBottom: 14 }}>
