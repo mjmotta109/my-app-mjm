@@ -145,6 +145,40 @@ export function suggestForRecipe(
 }
 
 /**
+ * Palabras que no distinguen a un plato de otro y por tanto no sirven para
+ * saber qué ingrediente lo define.
+ */
+const PALABRAS_VACIAS = new Set([
+  "de", "del", "la", "el", "los", "las", "un", "una", "con", "sin", "y", "en", "al", "a",
+  "casera", "casero", "caseros", "caseras", "rellena", "relleno", "guisado", "guisada",
+  "sudado", "sudada", "asado", "asada", "frito", "frita", "criolla", "criollo", "mixto",
+  "mixta", "clasico", "clasica", "para", "estilo", "tipo", "salteado", "salteada",
+]);
+
+function palabrasDe(texto: string): string[] {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/[^a-z]+/)
+    .filter((w) => w.length >= 3 && !PALABRAS_VACIAS.has(w));
+}
+
+/**
+ * ¿Este ingrediente le da el nombre al plato?
+ *
+ * Cambiar el pollo de una "Arepa rellena de pollo" por lentejas ahorra dinero y
+ * la aritmética cuadra, pero el plato que llega a la mesa ya no es el que dice
+ * el nombre. Eso es presentar una cosa como otra, así que no se hace
+ * automáticamente: el planificador puede abaratar una receta, no redefinirla.
+ * La sugerencia sigue existiendo para que la persona la acepte si quiere.
+ */
+export function defineLaIdentidad(recipe: Recipe, ingredient: Ingredient): boolean {
+  const delNombre = new Set(palabrasDe(recipe.name));
+  return palabrasDe(ingredient.name).some((w) => delNombre.has(w));
+}
+
+/**
  * Devuelve una copia de la receta con los ingredientes caros reemplazados.
  * La usa el planificador cuando el presupuesto no alcanza (§31, paso 8).
  */
@@ -161,6 +195,8 @@ export function substituteExpensive(
   const ingredients = recipe.ingredients.map((item) => {
     const from = catalog.get(item.ingredientId);
     if (!from) return item;
+    // Lo que le da el nombre al plato no se toca.
+    if (defineLaIdentidad(recipe, from)) return item;
 
     const candidates = [...new Set([...(item.allowedSubstitutes ?? []), ...(from.substitutes ?? [])])]
       .filter((id) => id !== from.id && !excluded.has(id))

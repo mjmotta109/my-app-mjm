@@ -10,6 +10,7 @@ import type {
   Meal,
   MealPlan,
   MealSlot,
+  MealSubstitution,
   PlanDiagnostics,
   Recipe,
 } from "./types.js";
@@ -17,8 +18,10 @@ import type { PriceIndex } from "./pricing.js";
 import { VirtualPantry, expiryUrgency, planPurchase } from "./inventory.js";
 import { costMeal } from "./costing.js";
 import { DEFAULT_CHILD_FACTOR, eaterEquivalents, scaleRecipe, type ScaleResult } from "./scaling.js";
-import { addNutrition, balanceScore, nutritionOfScaled, zeroNutrition } from "./nutrition.js";
-import { householdNeeds, perMealTargets } from "./nutrition-needs.js";
+import {
+  addNutrition, dayFitScore, nutritionOfScaled, zeroNutrition, type NutritionTotals,
+} from "./nutrition.js";
+import { householdNeeds, mealFloor, mealTarget } from "./nutrition-needs.js";
 import { substituteExpensive } from "./substitutions.js";
 import { addDays, dayOfWeek } from "./dates.js";
 import { mulberry32, seedFrom } from "./random.js";
@@ -62,13 +65,19 @@ export interface ScoringWeights {
 }
 
 export const DEFAULT_WEIGHTS: ScoringWeights = {
-  budget: 0.26,
-  inventory: 0.17,
-  variety: 0.16,
-  time: 0.12,
-  waste: 0.1,
-  nutrition: 0.09,
-  reuse: 0.06,
+  // La nutrición pesa casi tanto como el presupuesto a propósito. Con 0,09 el
+  // plan cumplía el presupuesto dando de comer 1.748 kcal al día contra una
+  // referencia de 2.000: ahorraba alimentando de menos. Ver DECISIONS.md D27.
+  // El desperdicio y la reutilización subieron (0,09 -> 0,14 y 0,06 -> 0,10)
+  // porque el gasto real no es lo que se come sino lo que se compra: un mes con
+  // 47 recetas distintas deja media despensa de paquetes abiertos. Ver D28.
+  budget: 0.3,
+  nutrition: 0.18,
+  inventory: 0.15,
+  waste: 0.14,
+  variety: 0.12,
+  reuse: 0.1,
+  time: 0.07,
   expiry: 0.04,
 };
 
@@ -92,6 +101,8 @@ export interface PlanRequest {
 interface Candidate {
   recipe: Recipe;
   scale: ScaleResult;
+  /** Nutrición de la receta ya escalada al hogar. Se calcula una sola vez. */
+  nutrition: NutritionTotals;
 }
 
 interface Attempt {
@@ -105,6 +116,10 @@ interface Attempt {
   pressure: number;
   /** Comidas que no cupieron en el tiempo declarado por el hogar. */
   overTimeMeals: number;
+  /** Comidas que no alcanzaron el piso nutricional de su horario. */
+  belowFloorMeals: number;
+  /** Energía media por persona y día. `null` si no hubo comidas. */
+  kcalPerPersonPerDay: number | null;
 }
 
 /** Presiones de presupuesto que se intentan, en orden, hasta caber. */
@@ -200,6 +215,13 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
         "no hay suficientes recetas compatibles con las preferencias del hogar.",
     );
   }
+  if (chosen.belowFloorMeals > 0) {
+    warnings.push(
+      `${chosen.belowFloorMeals} comida(s) se quedan por debajo del mínimo nutricional de su ` +
+        "horario. No hay recetas compatibles más sustanciosas: revisa las restricciones o el " +
+        "tiempo de cocina.",
+    );
+  }
   if (chosen.overTimeMeals > 0) {
     warnings.push(
       `${chosen.overTimeMeals} comida(s) no caben en el tiempo de cocina que declaraste. ` +
@@ -218,6 +240,8 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
     mealsRequested,
     distinctRecipes: new Set(chosen.meals.map((m) => m.recipeId)).size,
     mealsOverTimeBudget: chosen.overTimeMeals,
+    mealsBelowNutritionFloor: chosen.belowFloorMeals,
+    averageKcalPerPersonPerDay: chosen.kcalPerPersonPerDay,
     repairSteps,
     warnings,
   };
@@ -255,13 +279,32 @@ interface AttemptArgs {
 }
 
 function runAttempt(args: AttemptArgs): Attempt {
-  const { request, weights, seed, eaters, headcount, pressure } = args;
+  const { request, weights: baseWeights, seed, eaters, headcount, pressure } = args;
   const { household, catalog, prices, startDate } = request;
   const rand = mulberry32(seed ^ Math.round(pressure * 1000));
+
+  // Apretar el presupuesto no es solo "cocinar barato": el gasto real es lo que
+  // se COMPRA, y un mes con cuarenta recetas distintas deja media despensa de
+  // paquetes a medio usar. Cuando hay que apretar, lo que de verdad ahorra es
+  // repetir platos para terminar los paquetes. Ese es el intercambio honesto
+  // que se le ofrece a la persona: menos variedad a cambio de que el dinero
+  // alcance. La presión lo hace explícito en vez de dejarlo al azar.
+  const weights: ScoringWeights =
+    pressure === 0
+      ? baseWeights
+      : {
+          ...baseWeights,
+          budget: baseWeights.budget * (1 + 0.4 * pressure),
+          waste: baseWeights.waste * (1 + 0.9 * pressure),
+          reuse: baseWeights.reuse * (1 + 0.9 * pressure),
+          variety: baseWeights.variety * (1 - 0.6 * pressure),
+        };
 
   // A partir de presión media se reemplazan ingredientes caros por
   // alternativas más baratas antes de puntuar (§31, paso 8).
   let substitutionsApplied = 0;
+  /** Qué se cambió en cada receta, para poder decirlo en cada comida. */
+  const cambiosPorReceta = new Map<string, MealSubstitution[]>();
   let recipes = request.recipes;
   if (pressure >= 0.7) {
     const swapped: Recipe[] = [];
@@ -271,6 +314,15 @@ function runAttempt(args: AttemptArgs): Attempt {
         minSavingCop: 200,
       });
       substitutionsApplied += result.applied.length;
+      if (result.applied.length > 0) {
+        cambiosPorReceta.set(
+          recipe.id,
+          result.applied.map((a) => ({
+            fromIngredientId: a.fromIngredientId,
+            toIngredientId: a.toIngredientId,
+          })),
+        );
+      }
       swapped.push(result.recipe);
     }
     recipes = swapped;
@@ -286,9 +338,14 @@ function runAttempt(args: AttemptArgs): Attempt {
   for (const slot of household.slots) bySlot.set(slot, []);
   for (const recipe of eligible) {
     const scale = scaleRecipe(recipe, eaters, catalog);
+    const nutrition = nutritionOfScaled(scale, catalog);
     for (const slot of recipe.slots) {
       const bucket = bySlot.get(slot);
-      if (bucket) bucket.push({ recipe, scale });
+      if (!bucket) continue;
+      // Una comida principal solo se resuelve con un plato. Un jugo o un
+      // pedazo de queso con bocadillo no son un desayuno, por barato que salga.
+      if (slot !== "snack" && recipe.kind !== "plato") continue;
+      bucket.push({ recipe, scale, nutrition });
     }
   }
 
@@ -308,13 +365,28 @@ function runAttempt(args: AttemptArgs): Attempt {
 
   const totalMeals = household.days * household.slots.length;
   const varietyWindow = Math.min(14, Math.max(3, totalMeals));
+  // Tope duro de repeticiones. Sin él, apretar el presupuesto degenera en once
+  // recetas para noventa comidas: el dinero cuadra y el recetario sobra. Con
+  // 90 comidas salen 4 usos por receta, o sea ninguna más de una vez por
+  // semana. Si ni así cabe el presupuesto, el plan lo dice en vez de resolverlo
+  // sirviendo lo mismo todos los días.
+  const maxUsosPorReceta = Math.max(2, Math.ceil(totalMeals / 24));
   // Metas del hogar: del perfil físico si lo hay, o de la referencia genérica.
-  const mealTargets = perMealTargets(householdNeeds(household), household.slots.length);
+  const needs = householdNeeds(household);
+  // Piso y meta de cada horario, calculados una sola vez.
+  const floors = new Map(household.slots.map((slot) => [slot, mealFloor(needs, slot)]));
+  const targets = new Map(
+    household.slots.map((slot) => [slot, mealTarget(needs, slot, household.slots)]),
+  );
   let mealIndex = 0;
   let spentSoFar = 0;
   let totalValue = 0;
   /** Comidas que no cupieron en el tiempo declarado. Se reporta, no se esconde. */
   let overTimeMeals = 0;
+  /** Comidas que no alcanzaron el piso nutricional del horario. */
+  let belowFloorMeals = 0;
+  /** Energía total del plan, para poder reportar el promedio diario. */
+  let totalKcal = 0;
   let consumedToday = zeroNutrition();
 
   for (let day = 0; day < household.days; day++) {
@@ -325,12 +397,20 @@ function runAttempt(args: AttemptArgs): Attempt {
     if (mealPrep && day % windowDays === 0) useInWindow = new Map();
     usedToday = new Set();
 
+    // Energía que el día debería llevar acumulada al llegar a este horario.
+    let esperadoHastaAhora = 0;
     for (const slot of household.slots) {
       const candidates = bySlot.get(slot) ?? [];
       if (candidates.length === 0) {
         mealIndex++;
         continue;
       }
+
+      const floor = floors.get(slot) ?? { kcal: 0, proteinG: 0 };
+      const target = targets.get(slot) ?? { kcal: 0, proteinG: 0 };
+      // Lo que el día lleva de retraso: si el desayuno salió corto, el almuerzo
+      // tiene que compensar.
+      const kcalDebt = Math.max(0, esperadoHastaAhora - consumedToday.kcal);
 
       // Cuánto tiempo hay para cocinar ESTA comida, este día.
       const timeLimit = minutesAvailable(household.cookingTime, date, slot);
@@ -353,11 +433,30 @@ function runAttempt(args: AttemptArgs): Attempt {
       }));
 
       let chosen: { candidate: Candidate; score: number } | null = null;
-      let fallback: { candidate: Candidate; score: number; cost: number } | null = null;
+      let fallback: { candidate: Candidate; score: number; cost: number; cumplePiso: boolean } | null = null;
       /** La más rápida entre las que NO caben en el tiempo, por si no hay otra. */
       let quickest: { candidate: Candidate; score: number } | null = null;
+      /** La más sustanciosa entre las que no alcanzan el piso nutricional. */
+      let heartiest: { candidate: Candidate; score: number; cabe: boolean } | null = null;
+      /** La menos repetida, por si el tope de repeticiones las agotó todas. */
+      let menosUsada: { candidate: Candidate; usos: number; hoy: boolean } | null = null;
 
       for (const { candidate, simulated } of simulations) {
+        // Dos límites duros de repertorio, no preferencias:
+        //   - el mismo plato no se sirve dos veces el mismo día;
+        //   - ninguna receta pasa del tope de usos del plan.
+        // Como preferencia puntuada, la primera cedía en cuanto el presupuesto
+        // apretaba y el plan servía lo mismo en almuerzo y cena.
+        const usos = useCount.get(candidate.recipe.id) ?? 0;
+        const hoy = usedToday.has(candidate.recipe.id);
+        if (hoy || usos >= maxUsosPorReceta) {
+          const mejor =
+            !menosUsada ||
+            (!hoy && menosUsada.hoy) ||
+            (hoy === menosUsada.hoy && usos < menosUsada.usos);
+          if (mejor) menosUsada = { candidate, usos, hoy };
+          continue;
+        }
         const score = scoreCandidate({
           candidate,
           simulated,
@@ -367,7 +466,8 @@ function runAttempt(args: AttemptArgs): Attempt {
           targetPerMeal,
           timeLimit,
           difficultyCap,
-          mealTargets,
+          target,
+          kcalDebt,
           mealIndex,
           varietyWindow,
           lastUsedAt,
@@ -378,7 +478,6 @@ function runAttempt(args: AttemptArgs): Attempt {
           consumedToday,
           mealPrep,
           useInWindow,
-          usedToday,
           softExcluded: args.softExcluded,
           date,
           totalMeals,
@@ -386,18 +485,33 @@ function runAttempt(args: AttemptArgs): Attempt {
         });
         const jittered = score + rand() * 1e-6;
 
-        if (
+        // La reserva de último recurso. Se prefiere siempre una que cumpla el
+        // piso: la más barata del catálogo suele ser también la más flaca, y
+        // ahorrar sirviendo menos comida es justo lo que no se quiere.
+        const mejorReserva =
           !fallback ||
-          simulated.purchaseCop < fallback.cost ||
-          (simulated.purchaseCop === fallback.cost && jittered > fallback.score)
-        ) {
-          fallback = { candidate, score: jittered, cost: simulated.purchaseCop };
+          (cumpleFloor(candidate, floor) && !fallback.cumplePiso) ||
+          (cumpleFloor(candidate, floor) === fallback.cumplePiso &&
+            (simulated.purchaseCop < fallback.cost ||
+              (simulated.purchaseCop === fallback.cost && jittered > fallback.score)));
+        if (mejorReserva) {
+          fallback = {
+            candidate,
+            score: jittered,
+            cost: simulated.purchaseCop,
+            cumplePiso: cumpleFloor(candidate, floor),
+          };
         }
         // El tiempo es un límite real, no una preferencia: una receta de 90
         // minutos no entra en un martes de 25, por buena que sea en todo lo
-        // demás. Si NINGUNA cabe, abajo se toma la más rápida disponible en vez
-        // de dejar la comida sin planificar.
-        if (timeLimit !== null && candidate.recipe.minutes > timeLimit) {
+        // demás. Si NINGUNA cabe, abajo se toma la más rápida disponible.
+        const cabeEnTiempo = timeLimit === null || candidate.recipe.minutes <= timeLimit;
+        // El piso nutricional también es un límite real. Sin él, la forma más
+        // barata de cumplir el presupuesto es dar de comer menos, y el plan
+        // termina sirviendo 1.700 kcal al día contra una meta de 2.000.
+        const alcanzaPiso = cumpleFloor(candidate, floor);
+
+        if (!cabeEnTiempo) {
           if (
             !quickest ||
             candidate.recipe.minutes < quickest.candidate.recipe.minutes ||
@@ -406,23 +520,44 @@ function runAttempt(args: AttemptArgs): Attempt {
           ) {
             quickest = { candidate, score: jittered };
           }
-          continue;
         }
+        // Se anotan las dos reservas por separado: una receta puede fallar el
+        // tiempo Y el piso a la vez, y antes la primera comprobación se la
+        // tragaba, así que el plan servía una comida corta contándola como
+        // "se pasó de tiempo".
+        if (!alcanzaPiso) {
+          const mejorQueLaGuardada =
+            !heartiest ||
+            (cabeEnTiempo && !heartiest.cabe) ||
+            (cabeEnTiempo === heartiest.cabe &&
+              candidate.nutrition.kcal > heartiest.candidate.nutrition.kcal);
+          if (mejorQueLaGuardada) heartiest = { candidate, score: jittered, cabe: cabeEnTiempo };
+        }
+        if (!cabeEnTiempo || !alcanzaPiso) continue;
         if (pressure > 0 && simulated.purchaseCop > costCap) continue;
         if (!chosen || jittered > chosen.score) chosen = { candidate, score: jittered };
       }
 
       // Si los topes dejaron fuera a todas, se toma la mejor alternativa posible
-      // en vez de dejar la comida sin planificar: primero la más rápida entre
-      // las que se pasaron de tiempo, y si no, la más barata.
-      const winner = chosen?.candidate ?? quickest?.candidate ?? fallback?.candidate;
-      if (!chosen && quickest && timeLimit !== null) {
-        overTimeMeals++;
-      }
+      // en vez de dejar la comida sin planificar: la más sustanciosa, luego la
+      // más rápida entre las que se pasaron de tiempo, y si no, la más barata.
+      const winner =
+        chosen?.candidate ??
+        heartiest?.candidate ??
+        quickest?.candidate ??
+        fallback?.candidate ??
+        menosUsada?.candidate;
       if (!winner) {
         mealIndex++;
         continue;
       }
+      // Los diagnósticos se miden sobre lo que de verdad se sirvió, no sobre la
+      // rama por la que se llegó: son dos condiciones independientes y una
+      // comida puede incumplir las dos.
+      if (winner.nutrition.kcal < floor.kcal || winner.nutrition.proteinG < floor.proteinG) {
+        belowFloorMeals++;
+      }
+      if (timeLimit !== null && winner.recipe.minutes > timeLimit) overTimeMeals++;
 
       const costed = costMeal(winner.scale, pantry, prices, headcount, { commit: true });
       for (const id of costed.unpricedIngredientIds) unpriced.add(id);
@@ -439,10 +574,21 @@ function runAttempt(args: AttemptArgs): Attempt {
         costCop: costed.costCop,
         costPerPersonCop: perPerson[0] ?? 0,
         costIncomplete: costed.costIncomplete,
+        substitutions: cambiosPorReceta.get(winner.recipe.id) ?? [],
+        nutrition: {
+          kcal: Math.round(winner.nutrition.kcal),
+          proteinG: round(winner.nutrition.proteinG, 1),
+          carbsG: round(winner.nutrition.carbsG, 1),
+          fatG: round(winner.nutrition.fatG, 1),
+          fiberG: round(winner.nutrition.fiberG ?? 0, 1),
+          isEstimated: true,
+        },
         status: "planned",
       });
 
-      consumedToday = addNutrition(consumedToday, nutritionOfScaled(winner.scale, catalog));
+      consumedToday = addNutrition(consumedToday, winner.nutrition);
+      esperadoHastaAhora += target.kcal;
+      totalKcal += winner.nutrition.kcal;
       lastUsedAt.set(winner.recipe.id, mealIndex);
       useCount.set(winner.recipe.id, (useCount.get(winner.recipe.id) ?? 0) + 1);
       useInWindow.set(winner.recipe.id, (useInWindow.get(winner.recipe.id) ?? 0) + 1);
@@ -466,7 +612,17 @@ function runAttempt(args: AttemptArgs): Attempt {
     substitutionsApplied,
     pressure,
     overTimeMeals,
+    belowFloorMeals,
+    kcalPerPersonPerDay:
+      meals.length === 0 || headcount === 0
+        ? null
+        : Math.round(totalKcal / household.days / headcount),
   };
+}
+
+/** ¿La receta, ya escalada al hogar, alcanza el mínimo del horario? */
+function cumpleFloor(candidate: Candidate, floor: { kcal: number; proteinG: number }): boolean {
+  return candidate.nutrition.kcal >= floor.kcal && candidate.nutrition.proteinG >= floor.proteinG;
 }
 
 // ---------------------------------------------------------------------------
@@ -485,8 +641,10 @@ interface ScoreArgs {
   timeLimit: number | null;
   /** Dificultad máxima aceptable este día. `null` = cualquiera. */
   difficultyCap: Difficulty | null;
-  /** Metas nutricionales por comida, del hogar. */
-  mealTargets: { kcal: number; proteinG: number };
+  /** Meta de energía y proteína de este horario, para el hogar. */
+  target: { kcal: number; proteinG: number };
+  /** Energía que el día lleva de retraso respecto a lo esperado. */
+  kcalDebt: number;
   mealIndex: number;
   varietyWindow: number;
   lastUsedAt: Map<string, number>;
@@ -500,7 +658,6 @@ interface ScoreArgs {
   /** Veces que cada receta ya salió en la ventana de cocina actual. */
   useInWindow: ReadonlyMap<string, number>;
   /** Recetas ya servidas hoy. */
-  usedToday: ReadonlySet<string>;
   softExcluded: Set<string>;
   date: IsoDate;
   totalMeals: number;
@@ -549,7 +706,6 @@ function scoreCandidate(args: ScoreArgs): number {
     else varietyScore = 0.05;
     // Cocinar una vez y comerlo tres días es el punto. Comerlo de almuerzo y
     // otra vez de cena el MISMO día no: eso no ahorra una olla, solo cansa.
-    if (args.usedToday.has(candidate.recipe.id)) varietyScore *= 0.15;
   } else {
     varietyScore = 0.65 * recency + 0.35 * repeatScore;
     // Repetir el mismo plato con menos de dos días de diferencia hunde la
@@ -576,15 +732,14 @@ function scoreCandidate(args: ScoreArgs): number {
   }
   const wasteScore = wasteLines === 0 ? 1 : clamp01(1 - wastePenalty / wasteLines);
 
-  // 5. Nutrición: qué tanto ayuda a equilibrar el día contra las metas del
-  // hogar (del perfil físico si existe, o de la referencia genérica).
-  const nutrition = nutritionOfScaled(candidate.scale, args.catalog);
-  const nutritionScore = balanceScore(
+  // 5. Nutrición: qué tanto cubre lo que le FALTA al día, no una fracción fija.
+  // Si el desayuno salió liviano, el almuerzo tiene que compensar.
+  const nutrition = candidate.nutrition;
+  const nutritionScore = dayFitScore(
     nutrition,
-    args.consumedToday,
-    args.eaters,
-    args.slotsPerDay,
-    args.mealTargets,
+    args.target.kcal,
+    args.target.proteinG,
+    args.kcalDebt,
   );
 
   // 6. Reutilización: preferir ingredientes que ya están en el plan.

@@ -247,6 +247,15 @@ export interface RecipeIngredient {
   allowedSubstitutes?: string[];
 }
 
+/**
+ * Qué es la receta dentro de una comida.
+ *
+ * Existe porque sin esto el catálogo mezcla un sancocho con "arepa con
+ * mantequilla", y el planificador —que busca ajustarse al presupuesto— elige lo
+ * segundo. Una comida principal solo puede resolverse con un `plato`.
+ */
+export type RecipeKind = "plato" | "acompanamiento" | "bebida" | "snack";
+
 export interface Recipe {
   id: string;
   name: string;
@@ -264,6 +273,11 @@ export interface Recipe {
   nutritionIsEstimated: boolean;
   /** Cómo se comporta la receta al cocinarla por adelantado. */
   prep: PrepInfo;
+  /**
+   * Un `plato` se sostiene solo como comida. Lo demás acompaña, se bebe o se
+   * pica entre comidas, y NO puede ocupar un desayuno, un almuerzo ni una cena.
+   */
+  kind: RecipeKind;
 }
 
 /**
@@ -424,6 +438,22 @@ export interface CostedIngredientLine {
   priceIsDemo: boolean;
 }
 
+/**
+ * Un ingrediente que el planificador cambió por otro más barato dentro de esta
+ * comida concreta. Viaja con la comida para que la interfaz pueda decirlo: un
+ * plato que ya no lleva lo que decía no puede servirse en silencio.
+ */
+export interface MealSubstitution {
+  fromIngredientId: string;
+  toIngredientId: string;
+}
+
+/** Nutrición estimada de la comida tal como quedó, sustituciones incluidas. */
+export interface MealNutrition extends Nutrition {
+  /** Siempre estimada a partir de ingredientes crudos. Nunca es dato médico. */
+  isEstimated: boolean;
+}
+
 export interface Meal {
   id: string;
   date: IsoDate;
@@ -438,6 +468,10 @@ export interface Meal {
   costPerPersonCop: Cop;
   /** `true` si algún ingrediente no tenía precio y el costo está incompleto. */
   costIncomplete: boolean;
+  /** Cambios de ingrediente aplicados a esta comida. Vacío si no hubo ninguno. */
+  substitutions: MealSubstitution[];
+  /** Aporte estimado de la comida completa (todas las porciones). */
+  nutrition: MealNutrition;
   status: MealStatus;
 }
 
@@ -484,6 +518,13 @@ export interface PlanDiagnostics {
    * igual (con la receta más rápida disponible) pero el hogar debe saberlo.
    */
   mealsOverTimeBudget: number;
+  /**
+   * Comidas que no alcanzaron el mínimo nutricional del horario. Se
+   * planificaron con lo más sustancioso que había, y se reporta.
+   */
+  mealsBelowNutritionFloor: number;
+  /** Energía media por persona y día del plan. `null` si no se pudo estimar. */
+  averageKcalPerPersonPerDay: number | null;
   /** Pasos de reparación ejecutados para intentar caber en el presupuesto. */
   repairSteps: string[];
   warnings: string[];

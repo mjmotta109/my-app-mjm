@@ -150,3 +150,42 @@ function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return value < 0 ? 0 : value > 1 ? 1 : value;
 }
+
+/**
+ * Qué tan bien encaja una comida en el día.
+ *
+ * Dos decisiones que importan:
+ *
+ * 1. **La meta es la del horario, no un tercio del día.** Un desayuno se mide
+ *    contra lo que debe aportar un desayuno. Repartir en partes iguales empuja
+ *    a elegir siempre el plato más grande y mata la variedad.
+ * 2. **Hay una meseta, no un pico.** Cualquier comida entre el 80% y el 125%
+ *    de su meta puntúa igual de bien. Si la puntuación premiara clavar el
+ *    número exacto, el mismo plato ganaría los treinta días. Dentro de la
+ *    banda razonable, que decidan la variedad, el precio y el tiempo.
+ *
+ * Quedarse corto penaliza MÁS que pasarse: el producto existe para que la
+ * gente coma, no para que ahorre comiendo menos.
+ */
+export function dayFitScore(
+  contribution: Nutrition,
+  targetKcal: number,
+  targetProteinG: number,
+  /** Déficit acumulado del día hasta ahora, en kcal. Empuja a compensar. */
+  kcalDebt = 0,
+): number {
+  const objetivo = Math.max(1, targetKcal + Math.max(0, kcalDebt) * 0.5);
+  const ratio = contribution.kcal / objetivo;
+
+  let kcalFit: number;
+  if (ratio < 0.9) kcalFit = clamp01(ratio / 0.9);           // corto: penaliza duro
+  else if (ratio <= 1.25) kcalFit = 1;                        // banda razonable
+  else kcalFit = clamp01(1 - (ratio - 1.25) * 0.5);           // pasarse: penaliza suave
+
+  const proteinRatio = contribution.proteinG / Math.max(1, targetProteinG);
+  const proteinFit = proteinRatio >= 0.9 ? 1 : clamp01(proteinRatio / 0.9);
+
+  const fiberFit = clamp01((contribution.fiberG ?? 0) / 8);
+
+  return clamp01(0.5 * kcalFit + 0.38 * proteinFit + 0.12 * fiberFit);
+}

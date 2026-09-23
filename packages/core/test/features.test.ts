@@ -7,7 +7,7 @@ import { generateMealPlan } from "../src/planner.js";
 import { cookMeal, detectLeftovers, suggestLeftoverUses } from "../src/cooking.js";
 import { whatCanICook } from "../src/what-can-i-cook.js";
 import { rindeMas, averageGramsPerMeal } from "../src/rinde-mas.js";
-import { equivalentQuantity, evaluateSubstitution, suggestForRecipe, substituteExpensive } from "../src/substitutions.js";
+import { defineLaIdentidad, equivalentQuantity, evaluateSubstitution, suggestForRecipe, substituteExpensive } from "../src/substitutions.js";
 import { describeChange, parsePriceCsv, validateObservations, weeklyPriceUpdate } from "../src/price-update.js";
 import { parsePantryText } from "../src/nl-parse.js";
 import { parseCsv } from "../src/csv.js";
@@ -192,11 +192,45 @@ describe("sustituciones (§21)", () => {
   });
 
   it("substituteExpensive devuelve una receta más barata sin mutar la original", () => {
+    const original = RECIPE_BY_ID.get("arroz_frito_verduras")!;
+    const { recipe, applied } = substituteExpensive(original, INGREDIENT_BY_ID, prices, { minSavingCop: 200 });
+    expect(applied.length).toBeGreaterThan(0);
+    expect(original.ingredients).not.toBe(recipe.ingredients);
+    expect(RECIPE_BY_ID.get("arroz_frito_verduras")!.ingredients).toEqual(original.ingredients);
+  });
+
+  it("NO cambia el ingrediente que le da el nombre al plato", () => {
+    // Cambiar la carne de un "Sudado de carne" por lentejas cuadra la
+    // aritmética y ahorra dinero, pero lo que llega a la mesa ya no es lo que
+    // dice el nombre. El planificador puede abaratar una receta, no redefinirla.
     const sudado = RECIPE_BY_ID.get("sudado_carne")!;
     const { recipe, applied } = substituteExpensive(sudado, INGREDIENT_BY_ID, prices, { minSavingCop: 200 });
-    expect(applied.length).toBeGreaterThan(0);
-    expect(sudado.ingredients).not.toBe(recipe.ingredients);
-    expect(RECIPE_BY_ID.get("sudado_carne")!.ingredients[0]!.ingredientId).toBe("carne_res");
+    expect(applied.map((a) => a.fromIngredientId)).not.toContain("carne_res");
+    expect(recipe.ingredients.some((i) => i.ingredientId === "carne_res")).toBe(true);
+  });
+
+  it("marca como identidad el ingrediente nombrado en el plato, no los demás", () => {
+    const sudado = RECIPE_BY_ID.get("sudado_carne")!;
+    expect(defineLaIdentidad(sudado, INGREDIENT_BY_ID.get("carne_res")!)).toBe(true);
+    expect(defineLaIdentidad(sudado, INGREDIENT_BY_ID.get("cebolla_larga")!)).toBe(false);
+  });
+
+  it("el plan dice qué cambió en cada comida en vez de servirlo callado", () => {
+    const apretado = generateMealPlan({
+      household: { ...household, budgetCop: 350_000 },
+      startDate: DEMO_OBSERVED_ON, inventory: [], recipes: RECIPES,
+      catalog: INGREDIENT_BY_ID, prices,
+    });
+    for (const meal of apretado.meals) {
+      const receta = RECIPE_BY_ID.get(meal.recipeId)!;
+      // Toda sustitución aplicada viaja con la comida...
+      for (const cambio of meal.substitutions) {
+        expect(receta.ingredients.some((i) => i.ingredientId === cambio.fromIngredientId)).toBe(true);
+        // ...y nunca toca lo que nombra al plato.
+        const from = INGREDIENT_BY_ID.get(cambio.fromIngredientId)!;
+        expect(defineLaIdentidad(receta, from)).toBe(false);
+      }
+    }
   });
 });
 

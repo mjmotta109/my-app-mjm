@@ -388,3 +388,107 @@ corra— estaba roto desde el primer commit: no existía un `tsconfig.json` raí
 No se había notado porque durante todo el desarrollo se invocó `tsc -b` con los
 proyectos explícitos, nunca el script tal como está publicado. CI corre los
 comandos publicados; yo corría los que me convenían.
+
+---
+
+## D27 — El presupuesto no se cuadra dando de comer de menos 🍽️
+
+El planificador optimizaba presupuesto, y la forma más barata de cumplir un
+presupuesto es servir menos comida. El plan de 2 personas cabía en $800.000
+sirviendo **1.748 kcal por persona y día** contra una referencia de 2.000, y
+resolvía los desayunos con jugo, café con pan o queso con bocadillo.
+
+Tres cambios, en orden de importancia:
+
+1. **Una comida principal solo se resuelve con un plato.** Cada receta declara
+   ahora su `kind` (`plato`, `acompanamiento`, `bebida`, `snack`). Un jugo de
+   naranja no es un desayuno por barato que salga, así que no compite por ese
+   turno.
+2. **Piso nutricional por horario.** `MEAL_MIN_SHARE` fija el mínimo que una
+   comida debe aportar de la meta diaria (desayuno 18% de la energía, almuerzo
+   28%, cena 22%). Es un límite duro, como el tiempo de cocina: una receta que
+   no lo alcanza no se elige. Si **ninguna** lo alcanza se sirve la más
+   sustanciosa y **se reporta** en `mealsBelowNutritionFloor`.
+3. **`dayFitScore` en vez de `balanceScore`.** La puntuación premia acercarse a
+   la meta del día con una meseta entre el 90% y el 125%, no un pico exacto.
+   Con un pico, todas las comidas competían por ser "la que completa el día" y
+   la variedad colapsaba.
+
+Resultado medido: 1.748 → **2.013 kcal** por persona y día, ningún día por
+debajo de 1.500 (antes 5 de 30), 12 desayunos distintos en el mes.
+
+### El diagnóstico se mide sobre lo servido, no sobre la rama tomada
+
+La primera versión contaba las comidas cortas en la rama del `if` que las
+seleccionaba. Una receta que fallaba el tiempo **y** el piso se contaba solo
+como "se pasó de tiempo", y una comida de 812 kcal contra un piso de 880 se
+reportaba como cero incumplimientos. Ahora las dos condiciones se comprueban
+sobre la comida que quedó en el plan. Un diagnóstico que se calcula en otro
+sitio que el hecho que describe acaba describiendo otra cosa.
+
+---
+
+## D28 — Abaratar una receta sí; redefinirla, no 🥩
+
+Con el presupuesto apretado, el planificador aplicaba **192 sustituciones** en
+un plan de 90 comidas. Entre ellas: `pollo_pechuga` → `lenteja` dentro de una
+receta llamada **"Arepa rellena de pollo"**. La aritmética estaba bien (la
+equivalencia es por proteína, no por peso) y el ahorro era real. Lo que llegaba
+a la mesa no era lo que decía el nombre.
+
+Dos reglas nuevas:
+
+- **`defineLaIdentidad(receta, ingrediente)`**: si el nombre del ingrediente
+  comparte una palabra significativa con el nombre del plato, no se sustituye
+  automáticamente. La sugerencia sigue existiendo para que la persona la acepte
+  si quiere; lo que desaparece es el cambio a sus espaldas.
+- **`Meal.substitutions` y `Meal.nutrition`**: cada comida viaja con lo que de
+  verdad contiene y con su aporte estimado, en vez de obligar a la interfaz a
+  recalcularlo desde la receta original (que es exactamente el error que
+  cometió la primera versión de las pruebas).
+
+**Lo que costó, dicho sin adornos:** el plan de 2 personas pasó de $745.026 a
+~$845.000 y dejó de caber en $800.000. Ese ahorro no existía; era carne
+facturada como carne y servida como lenteja.
+
+---
+
+## D29 — El recetario también necesita un piso 📖
+
+Al quitar las sustituciones encubiertas, el presupuesto dejó de cuadrar. La
+escalera de presión aprendió entonces a cambiar variedad por dinero (menos peso
+a la variedad, más al desperdicio y la reutilización), porque el gasto real no
+es lo que se come sino lo que se **compra**: un mes con 47 recetas distintas
+deja media despensa de paquetes a medio usar.
+
+Funcionó demasiado bien: el plan cabía en $771.090 usando **once recetas para
+noventa comidas**. Cuadrar el dinero a costa de comer lo mismo todos los días
+es justo lo que hace que sobre el recetario.
+
+Ahora hay dos límites duros de repertorio, no preferencias puntuadas:
+
+- ninguna receta se repite más de `totalComidas / 24` veces (4 en un mes: una
+  vez por semana);
+- el mismo plato no se sirve dos veces el mismo día.
+
+La segunda **ya existía** como penalización del 0,15 sobre la puntuación de
+variedad, y cedió en cuanto el presupuesto apretó: el plan servía el mismo
+bowl en el almuerzo y en la cena. Una regla que se dobla bajo presión no es una
+regla.
+
+## Lo que esto deja sobre la mesa, dicho claro
+
+Con los precios de demostración, un mes de comidas completas para 2 personas
+—piso nutricional cumplido, sin sustituciones encubiertas, sin repetir un plato
+más de una vez por semana— cuesta alrededor de **$845.000**, no $800.000.
+
+El planificador lo dice y muestra el faltante exacto. No lo resuelve sirviendo
+menos ni repitiendo, porque las dos salidas consisten en darle a la persona algo
+peor de lo que cree estar recibiendo. Las palancas reales —subir el presupuesto,
+aceptar más repetición, cocinar menos comidas fuera de casa— son suyas, no
+mías.
+
+Recordatorio: **los precios de demostración no son precios reales de mercado**,
+así que esa cifra no es una afirmación sobre lo que cuesta comer en Colombia.
+Es lo que cuesta con los datos que la app trae dentro, y está etiquetada como
+tal en todas partes.

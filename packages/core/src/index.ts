@@ -49,7 +49,7 @@ export {
 } from "./inventory.js";
 
 export {
-  nutritionOfScaled, baseToGrams, balanceScore, addNutrition, zeroNutrition,
+  nutritionOfScaled, baseToGrams, dayFitScore, addNutrition, zeroNutrition,
   DAILY_REFERENCE, EMPTY_NUTRITION, type NutritionTotals,
 } from "./nutrition.js";
 
@@ -63,8 +63,8 @@ export {
   personEnergyNeeds, householdNeeds, restingEnergy, perMealTargets,
   MIFFLIN_ST_JEOR, ACTIVITY_FACTORS, ACTIVITY_LABELS, GOAL_ADJUSTMENT, GOAL_LABELS,
   PROTEIN_G_PER_KG, KCAL_FLOOR, FIBER_TARGET_G, GENERIC_ADULT, CHILD_ENERGY_FACTOR,
-  NUTRITION_DISCLAIMER_SHORT,
-  type EnergyNeeds, type HouseholdNeeds, type ProteinRange,
+  NUTRITION_DISCLAIMER_SHORT, mealFloor, mealTarget, MEAL_MIN_SHARE, MEAL_TARGET_SHARE,
+  type EnergyNeeds, type HouseholdNeeds, type ProteinRange, type MealFloor,
 } from "./nutrition-needs.js";
 
 export {
@@ -94,7 +94,7 @@ export {
 } from "./rinde-mas.js";
 
 export {
-  suggestForRecipe, substituteExpensive, evaluateSubstitution, equivalentQuantity,
+  suggestForRecipe, substituteExpensive, evaluateSubstitution, equivalentQuantity, defineLaIdentidad,
   type SubstitutionSuggestion, type SubstitutionBasis, type SuggestOptions,
 } from "./substitutions.js";
 

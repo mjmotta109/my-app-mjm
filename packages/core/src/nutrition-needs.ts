@@ -1,4 +1,4 @@
-import type { ActivityLevel, Household, NutritionGoal, PersonProfile, Sex } from "./types.js";
+import type { ActivityLevel, Household, MealSlot, NutritionGoal, PersonProfile, Sex } from "./types.js";
 import { round } from "./units.js";
 
 /**
@@ -349,3 +349,72 @@ export function perMealTargets(
 
 export const NUTRITION_DISCLAIMER_SHORT =
   "Estimación con ecuaciones poblacionales. Rinde no es una herramienta médica ni dietética.";
+
+// ---------------------------------------------------------------------------
+// Piso nutricional por comida
+// ---------------------------------------------------------------------------
+
+/**
+ * Fracción MÍNIMA de la meta diaria que cada horario debe aportar.
+ *
+ * Esto es lo que impide que "controlar el dinero" se traduzca en desayunar una
+ * arepa con mantequilla. El planificador optimiza presupuesto; sin un piso, la
+ * forma más barata de cumplir el presupuesto es dar de comer menos.
+ *
+ * Son mínimos, no objetivos: suman 0,68 y dejan margen para que el resto del
+ * día lo llenen las comidas que el hogar sí quiere. Y son deliberadamente
+ * alcanzables — un piso que ninguna receta cumple no protege a nadie, solo
+ * vacía el menú.
+ */
+export const MEAL_MIN_SHARE: Record<MealSlot, { kcal: number; protein: number }> = {
+  desayuno: { kcal: 0.18, protein: 0.16 },
+  almuerzo: { kcal: 0.28, protein: 0.3 },
+  cena: { kcal: 0.22, protein: 0.24 },
+  // Un snack es un snack: no tiene que sostener nada.
+  snack: { kcal: 0, protein: 0 },
+};
+
+/**
+ * Cómo se reparte la energía del día entre horarios.
+ *
+ * No en tercios iguales: un desayuno no es un tercio de lo que se come en el
+ * día. Repartir por igual empuja al planificador a elegir siempre el desayuno
+ * más grande del catálogo, y la variedad se desploma.
+ *
+ * Se normaliza sobre los horarios que el hogar tenga activos, así que un hogar
+ * que solo planifica almuerzo recibe ahí el 100%.
+ */
+export const MEAL_TARGET_SHARE: Record<MealSlot, number> = {
+  desayuno: 0.25,
+  almuerzo: 0.4,
+  cena: 0.3,
+  snack: 0.08,
+};
+
+/** Meta de energía y proteína de un horario concreto, para el hogar completo. */
+export function mealTarget(
+  needs: HouseholdNeeds,
+  slot: MealSlot,
+  activeSlots: readonly MealSlot[],
+): { kcal: number; proteinG: number } {
+  const total = activeSlots.reduce((sum, entry) => sum + MEAL_TARGET_SHARE[entry], 0);
+  const share = total > 0 ? MEAL_TARGET_SHARE[slot] / total : 1;
+  return {
+    kcal: Math.round(needs.kcal * share),
+    proteinG: Math.round(needs.proteinG.targetG * share),
+  };
+}
+
+export interface MealFloor {
+  kcal: number;
+  proteinG: number;
+}
+
+/** Piso absoluto de un horario, para el hogar completo. */
+export function mealFloor(needs: HouseholdNeeds, slot: MealSlot): MealFloor {
+  const share = MEAL_MIN_SHARE[slot];
+  return {
+    kcal: Math.round(needs.kcal * share.kcal),
+    proteinG: Math.round(needs.proteinG.targetG * share.protein),
+  };
+}
