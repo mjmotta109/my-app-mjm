@@ -20,7 +20,7 @@ Mercado inicial: **Colombia**. Moneda: **COP**.
 rinde/
 ├── packages/
 │   ├── core/     @rinde/core   Motor determinista. CERO dependencias.
-│   └── data/     @rinde/data   Catálogo demo: 100 ingredientes, 119 recetas, precios DEMO.
+│   └── data/     @rinde/data   Catálogo demo: 100 ingredientes, 144 recetas, precios DEMO.
 ├── apps/
 │   ├── web/      @rinde/web    PWA mobile-first (React 19 + Vite 8). El producto.
 │   │   ├── android/            Proyecto nativo (Capacitor 8, targetSdk 36).
@@ -88,8 +88,17 @@ npm run e2e                                  # recorre el flujo completo
 - **Necesidades según tu estado físico** (opcional): energía y proteína
   estimadas con Mifflin-St Jeor y factores de actividad, con piso de seguridad
   y fuentes citadas.
-- **Plan completo**: 30 días × 3 comidas para 2 personas con $800.000 sale en
-  menos de un segundo, dentro del presupuesto, con ~50 recetas distintas.
+- **Plan completo**: 30 días × 3 comidas para 2 personas sale en menos de un
+  segundo, con entre 27 y 31 recetas distintas, ninguna repetida dos días seguidos
+  ni más
+  de una vez por semana, y ninguna comida por debajo del mínimo nutricional de
+  su horario.
+  Con los precios de demostración ese mes cuesta **alrededor de $845.000**, así
+  que con un presupuesto de $800.000 **no cabe**, y la app lo dice con el
+  faltante exacto en vez de resolverlo sirviendo de menos o repitiendo plato
+  (ver `docs/DECISIONS.md`, D27–D29). Esa cifra no es una afirmación sobre lo
+  que cuesta comer en Colombia: es lo que cuesta con los datos demo que la app
+  trae dentro.
 - **Escalado de porciones** que nunca muestra `0,37 huevos`.
 - **Costo por comida y por persona**, con la suma cuadrada al peso.
 - **Lista de mercado** agrupada como se recorre la plaza, consolidada, en
@@ -99,7 +108,7 @@ npm run e2e                                  # recorre el flujo completo
 - **"Rinde más"**: en qué conviene gastar el dinero que sobra, calculado con
   datos de tu propio plan.
 - **Sustituciones** que equiparan proteína por proteína, no por peso.
-- **Recetario de 119 recetas** buscables por tiempo, dificultad y si se pueden
+- **Recetario de 144 recetas** buscables por tiempo, dificultad y si se pueden
   adelantar. Cocina colombiana de diario más platos de otras cocinas resueltos
   con ingredientes de la plaza: curry, salteados, wraps y lasaña junto al
   sancocho y el ajiaco.
