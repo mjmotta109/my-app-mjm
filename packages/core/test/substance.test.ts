@@ -199,6 +199,40 @@ describe("el recetario no puede degenerar para cuadrar el presupuesto", () => {
     expect(abusadas.map(([id, n]) => `${id}×${n}`)).toEqual([]);
   });
 
+  it("no sirve el mismo plato dos días seguidos", () => {
+    // Lo mismo lunes y martes se lee como "otra vez lo mismo", aunque el tope
+    // del mes esté lejos de agotarse.
+    const resultado = plan();
+    const fechas = [...new Set(resultado.meals.map((m) => m.date))].sort();
+    const seguidas: string[] = [];
+    for (let i = 1; i < fechas.length; i++) {
+      const ayer = new Set(
+        resultado.meals.filter((m) => m.date === fechas[i - 1]).map((m) => m.recipeId),
+      );
+      for (const meal of resultado.meals.filter((m) => m.date === fechas[i])) {
+        if (ayer.has(meal.recipeId)) seguidas.push(`${meal.date} ${meal.slot} ${meal.recipeId}`);
+      }
+    }
+    expect(seguidas).toEqual([]);
+  });
+
+  it("antes de servir una comida corta, repite: comer de menos es peor", () => {
+    // Un hogar con 10 minutos entre semana tiene pocas opciones por horario.
+    // La variedad cede ahí, el piso nutricional no.
+    const apurado = plan(
+      household({
+        cookingTime: {
+          weekday: { desayuno: 10, almuerzo: 25, cena: 20, snack: 10 },
+          weekend: { desayuno: 25, almuerzo: 45, cena: 30, snack: 15 },
+          maxWeekdayDifficulty: "facil",
+        },
+      }),
+    );
+    expect(apurado.diagnostics.mealsBelowNutritionFloor).toBe(0);
+    expect(apurado.diagnostics.mealsOverTimeBudget).toBe(0);
+    expect(apurado.diagnostics.distinctRecipes).toBeGreaterThanOrEqual(20);
+  });
+
   it("un mes trae al menos 24 platos distintos, no once", () => {
     expect(plan().diagnostics.distinctRecipes).toBeGreaterThanOrEqual(24);
   });

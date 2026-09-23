@@ -639,3 +639,53 @@ aprendiendo. La prueba ahora exige que **todo** plato del mes tenga al menos dos
 pasos con una cifra, y que la mitad del mes llegue a seis pasos con tres cifras.
 Con esa medida aparecieron trece recetas vagas que la anterior daba por buenas,
 y se reescribieron.
+
+---
+
+## D32 — El orden de las renuncias 🪜
+
+Una captura del plan mostró el mismo desayuno el lunes y el martes. No rompía
+ninguna regla —el tope es de cuatro usos al mes— pero se lee exactamente como lo
+que hay que evitar. Se extendió la regla del día: **el mismo plato tampoco se
+repite en días seguidos**.
+
+Costó dos comidas cortas: en el hogar de 10 minutos entre semana, quedarse sin
+repetir obligaba a servir por debajo del piso. Eso obligó a decidir de verdad en
+qué orden se renuncia a las cosas, en vez de dejarlo al orden en que estaban
+escritos los `if`:
+
+1. La mejor receta que cumple **todo**.
+2. Una que cumple tiempo y piso pero se pasa del tope de gasto **de esa comida**
+   — el tope por comida es una preferencia, el piso no.
+3. Repetir un plato de ayer o del mes que sí cumple los dos límites.
+4. La más sustanciosa, aunque no llegue al piso (y se reporta).
+5. La más rápida, aunque no quepa en el tiempo (y se reporta).
+6. Lo que haya.
+
+**Comer de menos es peor que comer dos veces lo mismo**, así que repetir va
+antes que quedarse corto. Pero repetir NO va antes que servir un plato distinto
+que solo era un poco caro: la primera versión de este orden ponía la repetición
+por delante del tope de gasto y hundió la variedad de 20 recetas a 12 en el
+escenario de presupuesto imposible.
+
+| | Antes | Después |
+|---|---|---|
+| Repeticiones en días seguidos (hogar normal) | varias | 0 |
+| Repeticiones en días seguidos (hogar apurado) | varias | 0 |
+| Comidas bajo el piso (hogar apurado) | 22 → 1 | **0** |
+| Recetas distintas (hogar apurado) | 29 | 28 |
+
+### Dos cosas que el nuevo aviso destapó
+
+Al comprobar que toda sustitución anunciada estuviera de verdad en la comida,
+apareció que una avena declaraba "huevo → pechuga de pollo". El cambio existía
+de verdad en el catálogo: `huevo` tiene la pechuga entre sus sustitutos y la
+equivalencia por proteína cuadra. Pero era el huevo **opcional** de una avena, y
+un ingrediente opcional puede no incluirse, así que el aviso hablaba de algo que
+no estaba en el plato.
+
+- `substituteExpensive` ya **no toca ingredientes opcionales**. Son el toque
+  final, lo que ahorran es calderilla y la equivalencia por proteína llega a
+  proponer disparates.
+- La comida solo declara los cambios que aparecen en **sus líneas**. Se avisa de
+  lo que se va a cocinar, no de lo que el catálogo consideró.

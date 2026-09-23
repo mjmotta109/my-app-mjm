@@ -358,6 +358,8 @@ function runAttempt(args: AttemptArgs): Attempt {
   let useInWindow = new Map<string, number>();
   /** Recetas ya usadas HOY: una tanda se reparte entre días, no dentro del día. */
   let usedToday = new Set<string>();
+  /** Último día del plan en que se usó cada receta. */
+  const ultimoDia = new Map<string, number>();
   const mealPrep = household.mealPrep?.enabled ? household.mealPrep : null;
   const windowDays = Math.max(1, mealPrep?.windowDays ?? 7);
   const inPlay = new Set<string>();
@@ -433,13 +435,16 @@ function runAttempt(args: AttemptArgs): Attempt {
       }));
 
       let chosen: { candidate: Candidate; score: number } | null = null;
-      let fallback: { candidate: Candidate; score: number; cost: number; cumplePiso: boolean } | null = null;
+      let fallback:
+        | { candidate: Candidate; score: number; cost: number; sirve: boolean }
+        | null = null;
       /** La más rápida entre las que NO caben en el tiempo, por si no hay otra. */
       let quickest: { candidate: Candidate; score: number } | null = null;
       /** La más sustanciosa entre las que no alcanzan el piso nutricional. */
       let heartiest: { candidate: Candidate; score: number; cabe: boolean } | null = null;
       /** La menos repetida, por si el tope de repeticiones las agotó todas. */
-      let menosUsada: { candidate: Candidate; usos: number; hoy: boolean } | null = null;
+      let menosUsada: { candidate: Candidate; usos: number; hoy: boolean; sirve: boolean } | null =
+        null;
 
       for (const { candidate, simulated } of simulations) {
         // Dos límites duros de repertorio, no preferencias:
@@ -448,13 +453,24 @@ function runAttempt(args: AttemptArgs): Attempt {
         // Como preferencia puntuada, la primera cedía en cuanto el presupuesto
         // apretaba y el plan servía lo mismo en almuerzo y cena.
         const usos = useCount.get(candidate.recipe.id) ?? 0;
-        const hoy = usedToday.has(candidate.recipe.id);
+        // "Hoy" incluye ayer: el mismo desayuno lunes y martes se lee como
+        // "otra vez lo mismo" aunque el tope mensual esté lejos de agotarse.
+        const hoy =
+          usedToday.has(candidate.recipe.id) ||
+          ultimoDia.get(candidate.recipe.id) === day - 1;
         if (hoy || usos >= maxUsosPorReceta) {
+          // Se anota si además cumpliría los dos límites reales (tiempo y
+          // piso): abajo eso decide si vale la pena repetir antes que servir
+          // una comida corta.
+          const sirve =
+            (timeLimit === null || candidate.recipe.minutes <= timeLimit) &&
+            cumpleFloor(candidate, floor);
           const mejor =
             !menosUsada ||
-            (!hoy && menosUsada.hoy) ||
-            (hoy === menosUsada.hoy && usos < menosUsada.usos);
-          if (mejor) menosUsada = { candidate, usos, hoy };
+            (sirve && !menosUsada.sirve) ||
+            (sirve === menosUsada.sirve &&
+              ((!hoy && menosUsada.hoy) || (hoy === menosUsada.hoy && usos < menosUsada.usos)));
+          if (mejor) menosUsada = { candidate, usos, hoy, sirve };
           continue;
         }
         const score = scoreCandidate({
@@ -485,23 +501,6 @@ function runAttempt(args: AttemptArgs): Attempt {
         });
         const jittered = score + rand() * 1e-6;
 
-        // La reserva de último recurso. Se prefiere siempre una que cumpla el
-        // piso: la más barata del catálogo suele ser también la más flaca, y
-        // ahorrar sirviendo menos comida es justo lo que no se quiere.
-        const mejorReserva =
-          !fallback ||
-          (cumpleFloor(candidate, floor) && !fallback.cumplePiso) ||
-          (cumpleFloor(candidate, floor) === fallback.cumplePiso &&
-            (simulated.purchaseCop < fallback.cost ||
-              (simulated.purchaseCop === fallback.cost && jittered > fallback.score)));
-        if (mejorReserva) {
-          fallback = {
-            candidate,
-            score: jittered,
-            cost: simulated.purchaseCop,
-            cumplePiso: cumpleFloor(candidate, floor),
-          };
-        }
         // El tiempo es un límite real, no una preferencia: una receta de 90
         // minutos no entra en un martes de 25, por buena que sea en todo lo
         // demás. Si NINGUNA cabe, abajo se toma la más rápida disponible.
@@ -511,6 +510,19 @@ function runAttempt(args: AttemptArgs): Attempt {
         // termina sirviendo 1.700 kcal al día contra una meta de 2.000.
         const alcanzaPiso = cumpleFloor(candidate, floor);
 
+        // La reserva de último recurso. Se prefiere siempre una que cumpla los
+        // dos límites reales: la más barata del catálogo suele ser también la
+        // más flaca, y ahorrar sirviendo menos comida es lo que no se quiere.
+        const sirveReserva = cabeEnTiempo && alcanzaPiso;
+        const mejorReserva =
+          !fallback ||
+          (sirveReserva && !fallback.sirve) ||
+          (sirveReserva === fallback.sirve &&
+            (simulated.purchaseCop < fallback.cost ||
+              (simulated.purchaseCop === fallback.cost && jittered > fallback.score)));
+        if (mejorReserva) {
+          fallback = { candidate, score: jittered, cost: simulated.purchaseCop, sirve: sirveReserva };
+        }
         if (!cabeEnTiempo) {
           if (
             !quickest ||
@@ -541,8 +553,23 @@ function runAttempt(args: AttemptArgs): Attempt {
       // Si los topes dejaron fuera a todas, se toma la mejor alternativa posible
       // en vez de dejar la comida sin planificar: la más sustanciosa, luego la
       // más rápida entre las que se pasaron de tiempo, y si no, la más barata.
+      // Orden de renuncias, de la que menos cuesta a la que más:
+      //   1. la mejor que cumple todo;
+      //   2. una que cumple tiempo y piso pero se pasa del tope de gasto de
+      //      esta comida — el tope es una preferencia, el piso no;
+      //   3. repetir un plato de ayer o del mes que sí cumple los dos límites;
+      //   4. la más sustanciosa aunque no llegue al piso;
+      //   5. la más rápida aunque no quepa en el tiempo;
+      //   6. lo que haya.
+      // Comer de menos es peor que comer dos veces lo mismo, y por eso repetir
+      // va antes que quedarse corto. Pero repetir NO va antes que servir un
+      // plato distinto que solo era un poco caro.
+      const caraPeroCompleta = fallback?.sirve ? fallback.candidate : undefined;
+      const repetirCompleta = menosUsada?.sirve ? menosUsada.candidate : undefined;
       const winner =
         chosen?.candidate ??
+        caraPeroCompleta ??
+        repetirCompleta ??
         heartiest?.candidate ??
         quickest?.candidate ??
         fallback?.candidate ??
@@ -574,7 +601,11 @@ function runAttempt(args: AttemptArgs): Attempt {
         costCop: costed.costCop,
         costPerPersonCop: perPerson[0] ?? 0,
         costIncomplete: costed.costIncomplete,
-        substitutions: cambiosPorReceta.get(winner.recipe.id) ?? [],
+        // Solo los cambios que de verdad están en el plato: se avisa de lo que
+        // se va a cocinar, no de lo que el catálogo consideró.
+        substitutions: (cambiosPorReceta.get(winner.recipe.id) ?? []).filter((cambio) =>
+          costed.lines.some((line) => line.ingredientId === cambio.toIngredientId),
+        ),
         nutrition: {
           kcal: Math.round(winner.nutrition.kcal),
           proteinG: round(winner.nutrition.proteinG, 1),
@@ -593,6 +624,7 @@ function runAttempt(args: AttemptArgs): Attempt {
       useCount.set(winner.recipe.id, (useCount.get(winner.recipe.id) ?? 0) + 1);
       useInWindow.set(winner.recipe.id, (useInWindow.get(winner.recipe.id) ?? 0) + 1);
       usedToday.add(winner.recipe.id);
+      ultimoDia.set(winner.recipe.id, day);
       spentSoFar += costed.purchaseCop;
       totalValue += costed.costCop;
       mealIndex++;

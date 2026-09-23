@@ -197,6 +197,12 @@ export function substituteExpensive(
     if (!from) return item;
     // Lo que le da el nombre al plato no se toca.
     if (defineLaIdentidad(recipe, from)) return item;
+    // Los opcionales tampoco: son el toque final, no el cuerpo del plato. Lo
+    // que ahorran es calderilla, y la equivalencia por proteína llega a
+    // proponer disparates —cambiar el huevo opcional de una avena por pechuga
+    // de pollo— que además no aparecen en la comida, porque un ingrediente
+    // opcional puede no incluirse.
+    if (item.optional) return item;
 
     const candidates = [...new Set([...(item.allowedSubstitutes ?? []), ...(from.substitutes ?? [])])]
       .filter((id) => id !== from.id && !excluded.has(id))
