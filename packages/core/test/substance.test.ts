@@ -228,3 +228,45 @@ describe("el recetario no puede degenerar para cuadrar el presupuesto", () => {
     }
   });
 });
+
+/** "Necesito recetas más complejas." */
+describe("el recetario se puede cocinar, no solo leer", () => {
+  /**
+   * Pasos que dicen CUÁNTO o CUÁNDO.
+   *
+   * La primera versión de esta prueba medía caracteres por paso, y eso premia
+   * escribir largo, no explicar. Un paso concreto casi siempre lleva un número
+   * —"9 minutos", "a 200 °C", "2 cm"—; "cocina hasta que ablande" no lleva
+   * ninguno y es justo lo que deja tirado a quien está aprendiendo.
+   */
+  function pasosConcretos(recipeId: string): number {
+    return RECIPE_BY_ID.get(recipeId)!.steps.filter((paso) => /\d/.test(paso)).length;
+  }
+
+  it("ningún plato del mes se despacha en menos de cuatro pasos", () => {
+    const servidas = new Set(plan().meals.map((m) => m.recipeId));
+    const cortas = [...servidas].filter((id) => RECIPE_BY_ID.get(id)!.steps.length < 4);
+    expect(cortas).toEqual([]);
+  });
+
+  it("todo plato del mes dice al menos dos veces cuánto o cuándo", () => {
+    const servidas = new Set(plan().meals.map((m) => m.recipeId));
+    const vagas = [...servidas].filter((id) => pasosConcretos(id) < 2);
+    expect(vagas).toEqual([]);
+  });
+
+  it("la mitad del mes se explica paso a paso, no en cuatro frases", () => {
+    const servidas = new Set(plan().meals.map((m) => m.recipeId));
+    const detalladas = [...servidas].filter(
+      (id) => RECIPE_BY_ID.get(id)!.steps.length >= 6 && pasosConcretos(id) >= 3,
+    );
+    expect(detalladas.length).toBeGreaterThanOrEqual(Math.floor(servidas.size / 2));
+  });
+
+  it("los platos largos son los que explican más", () => {
+    // Un sancocho de 90 minutos resuelto en cuatro frases no es una receta.
+    const largos = RECIPES.filter((r) => r.kind === "plato" && r.minutes >= 60);
+    const flojos = largos.filter((r) => r.steps.length < 5).map((r) => r.name);
+    expect(flojos).toEqual([]);
+  });
+});

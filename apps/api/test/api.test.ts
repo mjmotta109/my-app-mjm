@@ -185,9 +185,22 @@ describe("plan, mercado y cocinar — el flujo del §37", () => {
     mealId = plan.meals[0].id;
 
     expect(plan.meals).toHaveLength(90);
-    expect(plan.projectedSpendCop).toBeLessThanOrEqual(900_000);
     expect(plan.diagnostics.method).toBe("heuristic");
-    expect(plan.diagnostics.withinBudget).toBe(true);
+
+    // `withinBudget` no se afirma a ciegas: se comprueba que concuerde con el
+    // número. Antes esta prueba fijaba un tope de $900.000 y daba por hecho que
+    // cabía; cuando el planificador dejó de abaratar el plan cambiando la carne
+    // por lentejas (D28), el gasto honesto se salió del tope y la prueba falló
+    // por la razón equivocada: el plan no empeoró, dejó de mentir.
+    // El presupuesto se lee del plan: pruebas anteriores modifican el hogar.
+    const presupuesto = plan.budgetCop;
+    expect(plan.diagnostics.withinBudget).toBe(plan.projectedSpendCop <= presupuesto);
+    expect(plan.diagnostics.budgetDeltaCop).toBe(presupuesto - plan.projectedSpendCop);
+    if (!plan.diagnostics.withinBudget) {
+      expect(plan.diagnostics.warnings.join(" ")).toContain("presupuesto");
+    }
+    // Lo que no puede pasar es que cuadre el dinero dando de comer de menos.
+    expect(plan.diagnostics.mealsBelowNutritionFloor).toBe(0);
   });
 
   it("devuelve el plan vigente", async () => {

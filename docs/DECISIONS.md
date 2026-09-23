@@ -555,3 +555,87 @@ lista, en vez de servirlo callado (D28).
 Las 32 pruebas de recorrido pasan, incluidas dos nuevas que fijan la estructura:
 el inicio no puede volver a pasar de tres tarjetas-enlace, y la comida del día
 tiene que aparecer antes que el dinero.
+
+---
+
+## D31 — Un recetario se cocina, no se lee 📖
+
+> "Si tener el control del dinero se traduce en comerme una arepa con
+> mantequilla todos los días de desayuno, no tiene sentido agregar un
+> recetario."
+
+D27 arregló *qué* se sirve: platos de verdad, con su piso nutricional. Faltaba
+el otro lado: **cómo está escrito**. Un sancocho de 90 minutos resuelto en
+cuatro frases no es una receta, es un índice. Y las instrucciones daban por
+sabido justo lo que alguien que empieza no sabe: "agrega el hogao" supone que ya
+sabes hacer hogao.
+
+Se reescribieron los pasos de **40 platos** —los que el planificador sirve de
+verdad en un mes, más todos los de una hora o más— con lo que una receta corta
+se salta:
+
+- **Tiempos y temperaturas concretos**: "45 minutos a fuego bajo, debe apenas
+  burbujear", no "cocina hasta que ablande".
+- **El porqué de cada paso**: la sal endurece la cáscara del fríjol, el agua
+  fría aprieta la carne, la leche de coco se corta si hierve, la papa criolla es
+  la que da cuerpo al ajiaco.
+- **Cómo saber que está listo**: el pescado pasa de translúcido a blanco y se
+  abre en láminas; el jugo del muslo sale transparente, no rosado; la cuchara
+  deja un surco que tarda en cerrarse.
+- **El error que se comete**: amontonar la carne al sellarla, batir los huevos
+  de más, destapar el arroz, cortar el aguacate antes de tiempo.
+
+Tres pruebas lo sostienen, y se escribieron para que fallen si el recetario se
+adelgaza otra vez: ningún plato del mes se despacha en menos de cuatro pasos, al
+menos la mitad del mes trae instrucciones de verdad (seis pasos o más, con algo
+dicho en cada uno) y ningún plato de una hora o más se explica en menos de
+cinco.
+
+**Un error que vale la pena dejar escrito.** El primer intento hizo el reemplazo
+con una expresión regular no codiciosa sobre el bloque de cada receta. Como
+`re.search` devuelve la coincidencia más a la izquierda, el array que encontró
+no fue el de pasos sino el primero del bloque: el de horarios. El resultado
+sobrescribió horarios, porciones, minutos, dificultad, etiquetas e ingredientes
+de 22 recetas con texto de instrucciones. Lo destapó `tsc` de inmediato
+—`Expected 10-13 arguments, but got 5`— y se revirtió con `git checkout`. La
+segunda versión no busca el array de pasos: busca el cierre del de ingredientes
+(`]],`) y toma lo que sigue. Después de aplicarla, el diff se revisó línea por
+línea para confirmar que **solo** se habían tocado líneas de pasos.
+
+### El hueco que el aviso destapó
+
+Al medir el escenario "siempre corriendo" (10 minutos para el desayuno entre
+semana) el planificador reportaba **22 de 90 comidas bajo el piso** y 1.634 kcal
+por persona y día. El aviso era correcto y la comprobación independiente daba
+exactamente el mismo número, así que el diagnóstico funcionaba.
+
+Pero avisar de un hueco no lo tapa. La causa era del catálogo: **no había un
+solo plato de desayuno que cupiera en 10 minutos**. El planificador servía lo
+más rápido que hubiera, 700 kcal contra un piso de 720, todos los días.
+
+Se agregaron seis desayunos de 6 a 10 minutos que sí sostienen (1.061 a 1.858
+kcal para dos): huevos revueltos con queso y arepa, pan con huevo y aguacate,
+avena rápida con maní y panela, yogur con avena tostada, calentado exprés y
+arepa rellena de huevo con queso. Son de armar, no de cocinar.
+
+| Hogar "siempre corriendo" | Antes | Después |
+|---|---|---|
+| Comidas bajo el piso | 22 de 90 | 1 de 90 |
+| Comidas fuera de tiempo | 22 | 0 |
+| kcal por persona y día | 1.634 | 1.853 |
+| Gasto | — | $770.212, cabe en $800.000 |
+
+### Una prueba que medía lo que no era
+
+La primera versión de la prueba de calidad medía **caracteres por paso**. Eso
+premia escribir largo, no explicar, y cuando falló por un margen mínimo la
+tentación evidente era bajar el umbral de 90 a 80 —es decir, ajustar la prueba
+hasta que pasara.
+
+Se cambió la medida en vez del número. Un paso concreto casi siempre lleva una
+cifra: "9 minutos exactos", "a 200 °C", "trozos de 3 cm". "Cocina hasta que
+ablande" no lleva ninguna, y es justo lo que deja tirado a quien está
+aprendiendo. La prueba ahora exige que **todo** plato del mes tenga al menos dos
+pasos con una cifra, y que la mitad del mes llegue a seis pasos con tres cifras.
+Con esa medida aparecieron trece recetas vagas que la anterior daba por buenas,
+y se reescribieron.
