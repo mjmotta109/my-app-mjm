@@ -1,0 +1,146 @@
+name: Tablas de nutrición
+
+# Baja la tabla de composición de alimentos de USDA FoodData Central desde la
+# fuente oficial y deja en el repo solo lo que Rinde usa.
+#
+# Existe por la misma razón que el build de Android (D26): la política de red
+# del contenedor de desarrollo deniega fdc.nal.usda.gov, www.icbf.gov.co y
+# www.fao.org. Los runners de GitHub sí llegan. Así la tabla sale de la fuente
+# primaria y queda con su huella, en vez de transcribirse de memoria.
+#
+# Reglas:
+#   - El enlace de descarga NO se escribe a mano: se descubre en la página
+#     oficial de descargas. Si la página cambia y no aparece, el job falla.
+#   - Se guarda el SHA-256 de cada archivo descargado.
+#   - La nota de licencia se copia de la propia página, no se afirma.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - ".github/workflows/tablas-nutricion.yml"
+      - "scripts/tablas/**"
+  workflow_dispatch:
+
+jobs:
+  bajar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descubrir los enlaces en la página oficial de descargas
+        id: enlaces
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          curl -sSL --fail -A "rinde-tablas/1.0" -o work/pagina.html \
+            https://fdc.nal.usda.gov/download-datasets
+          # Todos los .zip de CSV que la página enlaza, para el registro.
+          grep -oiE 'href="[^"]+\.zip"' work/pagina.html | sed -E 's/^href="//I; s/"$//' \
+            | sort -u > work/enlaces.txt
+          echo "--- enlaces .zip en la página ---"; cat work/enlaces.txt
+
+          absoluto() { case "$1" in http*) echo "$1";; /*) echo "https://fdc.nal.usda.gov$1";; *) echo "https://fdc.nal.usda.gov/$1";; esac; }
+
+          SR=$(grep -iE 'sr_legacy.*csv.*\.zip$' work/enlaces.txt | sort | tail -n1 || true)
+          FF=$(grep -iE 'foundation.*csv.*\.zip$' work/enlaces.txt | sort | tail -n1 || true)
+          if [ -z "$SR" ]; then echo "ERROR: no se encontró el CSV de SR Legacy en la página"; exit 1; fi
+          echo "sr=$(absoluto "$SR")" >> "$GITHUB_OUTPUT"
+          echo "ff=$( [ -n "$FF" ] && absoluto "$FF" || echo "")" >> "$GITHUB_OUTPUT"
+
+          # Lo que la página dice sobre licencia, textual, para citarlo y no suponerlo.
+          python3 - <<'PYEOF'
+          import re, html
+          t = open("work/pagina.html", encoding="utf-8", errors="replace").read()
+          t = re.sub(r"<script.*?</script>|<style.*?</style>", " ", t, flags=re.S | re.I)
+          t = html.unescape(re.sub(r"<[^>]+>", " ", t))
+          t = re.sub(r"\s+", " ", t)
+          frases = set()
+          for m in re.finditer(r"(public domain|CC0|Creative Commons|license|licen)", t, re.I):
+              frases.add(t[max(0, m.start()-220): m.end()+220].strip())
+          open("work/licencia.txt", "w", encoding="utf-8").write("\n\n---\n\n".join(sorted(frases)) or "(la página no menciona licencia)")
+          PYEOF
+          echo "--- licencia según la página ---"; cat work/licencia.txt
+
+      - name: Descargar y extraer
+        run: |
+          set -euo pipefail
+          mkdir -p packages/data/tablas/usda
+          SALIDA=packages/data/tablas/usda
+          : > work/huellas.txt
+          bajar() {
+            local url="$1" nombre="$2" etiqueta="$3"
+            curl -sSL --fail -A "rinde-tablas/1.0" -o "work/$nombre.zip" "$url"
+            local sha; sha=$(sha256sum "work/$nombre.zip" | cut -d' ' -f1)
+            local bytes; bytes=$(stat -c %s "work/$nombre.zip")
+            echo "$etiqueta|$url|$sha|$bytes" >> work/huellas.txt
+            mkdir -p "work/$nombre" && unzip -q -o "work/$nombre.zip" -d "work/$nombre"
+            python3 scripts/tablas/extraer_fdc.py "work/$nombre" "$SALIDA/$nombre.csv" "$etiqueta"
+          }
+          bajar "${{ steps.enlaces.outputs.sr }}" sr_legacy "SR Legacy"
+          if [ -n "${{ steps.enlaces.outputs.ff }}" ]; then
+            bajar "${{ steps.enlaces.outputs.ff }}" foundation "Foundation Foods"
+          fi
+
+          {
+            echo "# Procedencia de estas tablas"
+            echo
+            echo "Generado por \`.github/workflows/tablas-nutricion.yml\`. No editar a mano."
+            echo
+            echo "- Descargado: $(date -u +%Y-%m-%dT%H:%MZ)"
+            echo "- Página de origen: https://fdc.nal.usda.gov/download-datasets"
+            echo "- Ejecución: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "| Conjunto | URL | SHA-256 del .zip | Bytes |"
+            echo "|---|---|---|---|"
+            while IFS='|' read -r e u s b; do echo "| $e | $u | \`$s\` | $b |"; done < work/huellas.txt
+            echo
+            echo "## Enlaces .zip que ofrecía la página"
+            echo; sed 's/^/- /' work/enlaces.txt
+            echo
+            echo "## Lo que la página dice sobre licencia (textual)"
+            echo; echo '```'; cat work/licencia.txt; echo; echo '```'
+            echo
+            echo "## Columnas"
+            echo
+            echo "Valores por 100 g. Un nutriente ausente queda vacío, no en cero."
+            echo "\`energy_basis\` dice qué variante de energía se usó."
+          } > "$SALIDA/FUENTE.md"
+          cat "$SALIDA/FUENTE.md"
+          wc -l "$SALIDA"/*.csv
+
+      - name: Buscar la tabla colombiana (ICBF) — solo exploración
+        continue-on-error: true
+        run: |
+          # No se descarga ni se interpreta nada: solo se registra qué responde,
+          # para decidir con datos si hay una versión legible por máquina.
+          SALIDA=packages/data/tablas/icbf_exploracion.txt
+          : > "$SALIDA"
+          for u in \
+            "https://www.icbf.gov.co/" \
+            "https://www.icbf.gov.co/nutricion" \
+            "https://www.icbf.gov.co/bienestar/nutricion" ; do
+            code=$(curl -sSL -A "rinde-tablas/1.0" -o work/icbf.html -w "%{http_code}" "$u" || echo "fallo")
+            echo "== $u -> $code" >> "$SALIDA"
+            grep -oiE 'href="[^"]*"[^>]*>[^<]*(composici|TCAC|tabla de alimentos)[^<]*' work/icbf.html 2>/dev/null \
+              | head -20 >> "$SALIDA" || true
+            grep -oiE 'href="[^"]*(composici|tcac)[^"]*"' work/icbf.html 2>/dev/null | head -20 >> "$SALIDA" || true
+          done
+          cat "$SALIDA"
+
+      - name: Guardar en el repo
+        run: |
+          set -euo pipefail
+          git config user.name "rinde-tablas[bot]"
+          git config user.email "rinde-tablas@users.noreply.github.com"
+          git add packages/data/tablas
+          if git diff --cached --quiet; then echo "Sin cambios."; exit 0; fi
+          git commit -m "Tablas de composición de USDA FoodData Central, bajadas de la fuente oficial" \
+                     -m "Generado por .github/workflows/tablas-nutricion.yml (run ${GITHUB_RUN_ID})."
+          # Si entre tanto llegó otro commit a la rama, se pone este encima.
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
