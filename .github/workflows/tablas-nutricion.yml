@@ -203,10 +203,15 @@ jobs:
               # tabla y citarlas. La huella permite verificar contra el original.
               case "$nombre" in
                 *.pdf|*.PDF)
-                  txt="packages/data/tablas/icbf/${nombre%.*}.txt"
-                  if pdftotext -layout "work/$nombre" "$txt"; then
-                    nota=" → texto en \`$(basename "$txt")\` ($(wc -l < "$txt") líneas)"
-                    pdfinfo "work/$nombre" | sed 's/^/    /' >> "$SALIDA.info" || true
+                  { echo "  $nombre:"; pdfinfo "work/$nombre" | sed 's/^/    /'; } >> "$SALIDA.info" || true
+                  # Si el propio PDF prohíbe copiar su contenido, no se extrae
+                  # nada. pdftotext ignora ese permiso; Rinde no. Que se pueda
+                  # técnicamente no quiere decir que esté permitido.
+                  if pdfinfo "work/$nombre" | grep -qi 'copy:no'; then
+                    nota=" → **el PDF prohíbe copiar su contenido (copy:no): no se extrajo nada**"
+                  else
+                    txt="packages/data/tablas/icbf/${nombre%.*}.txt"
+                    pdftotext -layout "work/$nombre" "$txt" && nota=" → texto en \`$(basename "$txt")\`"
                   fi ;;
                 *) cp "work/$nombre" "packages/data/tablas/icbf/$nombre" ;;
               esac

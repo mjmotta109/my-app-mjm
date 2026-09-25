@@ -286,3 +286,19 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
     Optimized:       no
     PDF version:     1.6
 ```
+
+---
+
+## Decisión: no se usa ningún valor de estos documentos
+
+Los tres PDF traen el permiso **`copy:no`** (ver los metadatos de arriba): el
+propio documento prohíbe copiar su contenido. `pdftotext` ignora ese permiso y
+una primera corrida extrajo el texto, pero **se borró del repositorio sin
+haberse usado** y el workflow ya no extrae nada de un PDF que lo prohíba.
+
+La regla del proyecto es no asumir que una fuente puede usarse. La TCAC existe,
+es pública para consultar y es la fuente correcta para los ingredientes que
+USDA no trae (papa criolla, panela, arracacha, bocadillo, kumis, queso costeño),
+pero incorporarla a una aplicación requiere un permiso o una versión de datos
+abiertos del ICBF. Hasta entonces esos ingredientes siguen marcados como
+estimados.
