@@ -1,4 +1,6 @@
-import type { ActivityLevel, Household, MealSlot, NutritionGoal, PersonProfile, Sex } from "./types.js";
+import type {
+  ActivityLevel, Household, MealSlot, NutritionGoal, PersonProfile, PortionBasis, Sex,
+} from "./types.js";
 import { round } from "./units.js";
 
 /**
@@ -80,6 +82,24 @@ export const GOAL_ADJUSTMENT: Record<NutritionGoal, number> = {
   masa_muscular: 0.05,
 };
 
+/**
+ * Tope absoluto del déficit, además del porcentaje.
+ *
+ * Con un gasto alto, el 15% pasa de 500 kcal. Rinde se queda por debajo de esa
+ * cifra por decisión propia y conservadora: no es una recomendación clínica, es
+ * el límite de lo que una app de mercado propone sin que nadie la supervise.
+ */
+export const MAX_DEFICIT_KCAL = 500;
+
+/**
+ * IMC por debajo del cual la clasificación de la OMS habla de bajo peso. Con
+ * un IMC así, Rinde no aplica déficit aunque se pida.
+ */
+export const BMI_UNDERWEIGHT = 18.5;
+
+/** Por debajo de esta edad no se aplica déficit: crecer no es bajar de peso. */
+export const MIN_AGE_FOR_DEFICIT = 18;
+
 export const GOAL_LABELS: Record<NutritionGoal, string> = {
   mantener: "Mantener el peso",
   bajar_peso: "Bajar de peso",
@@ -160,6 +180,15 @@ export interface EnergyNeeds {
   warnings: string[];
   /** Explicación en una línea de en qué se basó el número. */
   basis: string;
+  /**
+   * El objetivo que de verdad se aplicó. Puede no coincidir con el pedido:
+   * bajar de peso se convierte en mantener cuando no es seguro proponerlo.
+   */
+  appliedGoal: NutritionGoal;
+  /** Por qué no se aplicó el objetivo pedido, si no se aplicó. */
+  goalNotApplied?: string;
+  /** Índice de masa corporal, si hay peso y estatura. */
+  bmi: number | null;
 }
 
 /** Gasto energético en reposo. `null` si falta peso, estatura o edad. */
@@ -185,6 +214,42 @@ export function restingEnergy(profile: PersonProfile): number | null {
   return Math.round(base + constant);
 }
 
+/** IMC = peso / estatura². `null` si falta alguno. */
+export function bodyMassIndex(profile: PersonProfile): number | null {
+  const { weightKg, heightCm } = profile;
+  if (!weightKg || !heightCm || weightKg <= 0 || heightCm <= 0) return null;
+  const metros = heightCm / 100;
+  return round(weightKg / (metros * metros), 1);
+}
+
+/**
+ * ¿Es seguro que Rinde, por su cuenta, proponga un déficit a esta persona?
+ * Devuelve el motivo si NO lo es. Todas son razones para no hacerlo, nunca
+ * para hacerlo más fuerte.
+ */
+export function deficitBlockedReason(profile: PersonProfile): string | null {
+  if (profile.kind === "nino") {
+    return "Rinde no aplica déficit a niños: en crecimiento, comer menos no es bajar de peso.";
+  }
+  if (profile.ageYears !== undefined && profile.ageYears < MIN_AGE_FOR_DEFICIT) {
+    return `Rinde no aplica déficit a menores de ${MIN_AGE_FOR_DEFICIT} años.`;
+  }
+  if (profile.flags?.includes("embarazo") || profile.flags?.includes("lactancia")) {
+    return "Durante el embarazo o la lactancia Rinde no aplica déficit.";
+  }
+  if (profile.flags?.includes("condicion_medica")) {
+    return "Con una condición médica registrada, Rinde no aplica déficit por su cuenta.";
+  }
+  const imc = bodyMassIndex(profile);
+  if (imc !== null && imc < BMI_UNDERWEIGHT) {
+    return (
+      `Con un IMC de ${imc.toLocaleString("es-CO")} (por debajo de ${BMI_UNDERWEIGHT.toLocaleString("es-CO")}) ` +
+      "Rinde no aplica déficit."
+    );
+  }
+  return null;
+}
+
 export function personEnergyNeeds(profile: PersonProfile): EnergyNeeds {
   const missing: string[] = [];
   const warnings: string[] = [];
@@ -206,10 +271,21 @@ export function personEnergyNeeds(profile: PersonProfile): EnergyNeeds {
     );
   }
 
-  const bmrKcal = restingEnergy(profile);
+  // Mifflin-St Jeor se derivó con personas adultas. Aplicarla a un niño daría
+  // un número con apariencia de precisión y sin respaldo, así que para niños se
+  // usa siempre la referencia, aunque haya peso y estatura.
+  const bmrKcal = profile.kind === "nino" ? null : restingEnergy(profile);
+  const bmi = bodyMassIndex(profile);
 
   // Sin datos suficientes: referencia genérica, dicho en voz alta.
   if (bmrKcal === null) {
+    const pedido = profile.goal;
+    const sinObjetivo =
+      pedido === "mantener"
+        ? undefined
+        : `Para "${GOAL_LABELS[pedido]}" hacen falta peso, estatura y edad. Sin ellos Rinde ` +
+          "usa la referencia de mantenimiento.";
+    if (sinObjetivo) warnings.push(sinObjetivo);
     const childScale = profile.kind === "nino" ? CHILD_ENERGY_FACTOR : 1;
     return {
       bmrKcal: null,
@@ -227,6 +303,9 @@ export function personEnergyNeeds(profile: PersonProfile): EnergyNeeds {
       basis:
         `Referencia genérica (${GENERIC_ADULT.kcal} kcal para una persona adulta). ` +
         `Faltan datos: ${missing.join(", ")}.`,
+      appliedGoal: "mantener",
+      ...(sinObjetivo ? { goalNotApplied: sinObjetivo } : {}),
+      bmi,
     };
   }
 
@@ -238,7 +317,21 @@ export function personEnergyNeeds(profile: PersonProfile): EnergyNeeds {
   }
 
   const tdeeKcal = Math.round(bmrKcal * ACTIVITY_FACTORS[profile.activity]);
-  const adjusted = Math.round(tdeeKcal * (1 + GOAL_ADJUSTMENT[profile.goal]));
+
+  let appliedGoal: NutritionGoal = profile.goal;
+  let goalNotApplied: string | undefined;
+  if (profile.goal === "bajar_peso") {
+    const bloqueo = deficitBlockedReason(profile);
+    if (bloqueo) {
+      appliedGoal = "mantener";
+      goalNotApplied = `${bloqueo} Se calcula para mantener el peso.`;
+      warnings.push(goalNotApplied);
+    }
+  }
+
+  let ajuste = Math.round(tdeeKcal * GOAL_ADJUSTMENT[appliedGoal]);
+  if (appliedGoal === "bajar_peso") ajuste = Math.max(ajuste, -MAX_DEFICIT_KCAL);
+  const adjusted = tdeeKcal + ajuste;
   const floor = KCAL_FLOOR[profile.sex];
 
   let targetKcal = adjusted;
@@ -269,7 +362,13 @@ export function personEnergyNeeds(profile: PersonProfile): EnergyNeeds {
     warnings,
     basis:
       `Mifflin-St Jeor: ${bmrKcal} kcal en reposo × ${ACTIVITY_FACTORS[profile.activity]} ` +
-      `(${profile.activity}) = ${tdeeKcal} kcal, ajustado para "${GOAL_LABELS[profile.goal]}".`,
+      `(${profile.activity}) = ${tdeeKcal} kcal` +
+      (ajuste === 0
+        ? `, para "${GOAL_LABELS[appliedGoal]}".`
+        : `, ${ajuste > 0 ? "+" : "−"}${Math.abs(ajuste)} kcal para "${GOAL_LABELS[appliedGoal]}".`),
+    appliedGoal,
+    ...(goalNotApplied ? { goalNotApplied } : {}),
+    bmi,
   };
 }
 
@@ -417,4 +516,100 @@ export function mealFloor(needs: HouseholdNeeds, slot: MealSlot): MealFloor {
     kcal: Math.round(needs.kcal * share.kcal),
     proteinG: Math.round(needs.proteinG.targetG * share.protein),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Porciones según necesidades
+// ---------------------------------------------------------------------------
+
+export interface PortionSizing {
+  basis: PortionBasis;
+  /** Raciones de adulto de referencia que se cocinan en cada comida. */
+  eaters: number;
+  /** Las que habría con porciones estándar. */
+  standardEaters: number;
+  perPerson: {
+    profileId: string;
+    name?: string;
+    /** Fracción de una ración de adulto de referencia. */
+    share: number;
+    appliedGoal: NutritionGoal;
+  }[];
+  warnings: string[];
+}
+
+/**
+ * Cuántas raciones se cocinan en cada comida.
+ *
+ * Con `estandar` (el defecto) salen de `adults` y `children`, como siempre.
+ *
+ * Con `necesidades`, cada persona pesa lo que su energía estimada frente a la
+ * referencia de 2.000 kcal: quien necesita 1.700 come 0,85 de una ración, quien
+ * necesita 2.600 come 1,3. Así "mantener el peso" y "bajar de peso" cambian de
+ * verdad lo que se compra, que es la única forma de que el objetivo tenga algo
+ * que ver con el presupuesto.
+ *
+ * Lo que NO hace:
+ *   - Para niños no usa la ecuación de adultos: usa siempre su factor.
+ *   - A quien no tiene perfil le deja la ración estándar, no una inventada.
+ *   - No baja de los pisos calóricos: eso ya lo garantiza `personEnergyNeeds`.
+ */
+export function portionSizing(
+  household: Household,
+  childFactor: number = CHILD_ENERGY_FACTOR,
+): PortionSizing {
+  const standardEaters = household.adults + household.children * childFactor;
+  const basis: PortionBasis = household.portionBasis ?? "estandar";
+  const profiles = household.nutritionProfiles ?? [];
+
+  if (basis !== "necesidades" || profiles.length === 0) {
+    return {
+      basis: "estandar",
+      eaters: standardEaters,
+      standardEaters,
+      perPerson: [],
+      warnings:
+        basis === "necesidades"
+          ? ["Para ajustar las porciones a cada persona hace falta su perfil físico. Se usan porciones estándar."]
+          : [],
+    };
+  }
+
+  const warnings: string[] = [];
+  const adultos = profiles.filter((p) => p.kind === "adulto").slice(0, household.adults);
+  const ninos = profiles.filter((p) => p.kind === "nino").slice(0, household.children);
+  const sobrantes = profiles.length - adultos.length - ninos.length;
+  if (sobrantes > 0) {
+    warnings.push(
+      `Hay ${sobrantes} perfil(es) de más frente a las personas del hogar; no se cuentan.`,
+    );
+  }
+
+  const perPerson: PortionSizing["perPerson"] = [];
+  for (const perfil of adultos) {
+    const needs = personEnergyNeeds(perfil);
+    perPerson.push({
+      profileId: perfil.id,
+      ...(perfil.name ? { name: perfil.name } : {}),
+      share: round(needs.targetKcal / GENERIC_ADULT.kcal, 3),
+      appliedGoal: needs.appliedGoal,
+    });
+  }
+  for (const perfil of ninos) {
+    perPerson.push({
+      profileId: perfil.id,
+      ...(perfil.name ? { name: perfil.name } : {}),
+      share: childFactor,
+      appliedGoal: "mantener",
+    });
+  }
+
+  const sinPerfil =
+    (household.adults - adultos.length) + (household.children - ninos.length) * childFactor;
+  if (household.adults - adultos.length > 0 || household.children - ninos.length > 0) {
+    warnings.push("Las personas sin perfil físico reciben la porción estándar.");
+  }
+
+  const eaters = round(perPerson.reduce((t, p) => t + p.share, 0) + sinPerfil, 3);
+  return { basis: "necesidades", eaters, standardEaters, perPerson, warnings };
 }

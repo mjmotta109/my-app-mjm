@@ -17,11 +17,11 @@ import type {
 import type { PriceIndex } from "./pricing.js";
 import { VirtualPantry, expiryUrgency, planPurchase } from "./inventory.js";
 import { costMeal } from "./costing.js";
-import { DEFAULT_CHILD_FACTOR, eaterEquivalents, scaleRecipe, type ScaleResult } from "./scaling.js";
+import { DEFAULT_CHILD_FACTOR, scaleRecipe, type ScaleResult } from "./scaling.js";
 import {
   addNutrition, dayFitScore, nutritionOfScaled, zeroNutrition, type NutritionTotals,
 } from "./nutrition.js";
-import { householdNeeds, mealFloor, mealTarget } from "./nutrition-needs.js";
+import { householdNeeds, mealFloor, mealTarget, portionSizing } from "./nutrition-needs.js";
 import { substituteExpensive } from "./substitutions.js";
 import { addDays, dayOfWeek } from "./dates.js";
 import { mulberry32, seedFrom } from "./random.js";
@@ -158,7 +158,18 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
     throw new RangeError("El plan debe cubrir al menos un día");
   }
 
-  const eaters = eaterEquivalents(household.adults, household.children, childFactor);
+  // Porciones: estándar por defecto; según las necesidades de cada persona solo
+  // si el hogar lo eligió (ver `portionSizing`).
+  const porciones = portionSizing(household, childFactor);
+  const eaters = porciones.eaters;
+  // El planificador apunta a usar el presupuesto: con menos comida que comprar,
+  // gastaría lo que sobra en platos más caros. Cuando las porciones bajan
+  // porque alguien eligió bajar de peso, eso contradice la elección — y medido,
+  // se comía el 70% del ahorro. Así que el gasto objetivo baja en la misma
+  // proporción que las porciones. Nunca sube: si las necesidades superan la
+  // porción estándar, el presupuesto sigue siendo el techo.
+  const spendScale =
+    porciones.standardEaters > 0 ? Math.min(1, eaters / porciones.standardEaters) : 1;
   const headcount = household.adults + household.children;
   const mealsRequested = household.days * household.slots.length;
   const { hardExcluded, softExcluded, requiredDiets } = splitPreferences(household);
@@ -173,6 +184,7 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
       weights,
       seed,
       eaters,
+      spendScale,
       headcount,
       pressure,
       hardExcluded,
@@ -189,7 +201,9 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
       );
     }
     if (best === null || attempt.purchaseTotalCop < best.purchaseTotalCop) best = attempt;
-    if (attempt.purchaseTotalCop <= household.budgetCop) {
+    // Con porciones reducidas la meta es el presupuesto escalado, no el total:
+    // parar en cuanto cabe en el total dejaba $120.000 en paquetes abiertos.
+    if (attempt.purchaseTotalCop <= household.budgetCop * spendScale) {
       best = attempt;
       break;
     }
@@ -228,6 +242,7 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
         "No hay recetas compatibles más rápidas para ese momento del día.",
     );
   }
+  warnings.push(...porciones.warnings);
   if (prices.containsDemo()) {
     warnings.push("El plan usa precios de demostración. No son precios reales de mercado.");
   }
@@ -242,6 +257,9 @@ export function generateMealPlan(request: PlanRequest): MealPlan {
     mealsOverTimeBudget: chosen.overTimeMeals,
     mealsBelowNutritionFloor: chosen.belowFloorMeals,
     averageKcalPerPersonPerDay: chosen.kcalPerPersonPerDay,
+    portionBasis: porciones.basis,
+    portionEquivalents: round(porciones.eaters, 2),
+    standardPortionEquivalents: round(porciones.standardEaters, 2),
     repairSteps,
     warnings,
   };
@@ -271,6 +289,11 @@ interface AttemptArgs {
   weights: ScoringWeights;
   seed: number;
   eaters: number;
+  /**
+   * Fracción del presupuesto a la que apunta el plan. Es 1 salvo cuando las
+   * porciones se ajustaron a la baja (ver `generateMealPlan`).
+   */
+  spendScale: number;
   headcount: number;
   pressure: number;
   hardExcluded: Set<string>;
@@ -419,7 +442,7 @@ function runAttempt(args: AttemptArgs): Attempt {
       const difficultyCap = maxDifficultyFor(household.cookingTime, date);
 
       const remainingMeals = Math.max(1, totalMeals - mealIndex);
-      const targetBudget = household.budgetCop * BUDGET_UTILIZATION;
+      const targetBudget = household.budgetCop * BUDGET_UTILIZATION * args.spendScale;
       const remainingBudget = Math.max(0, targetBudget - spentSoFar);
       // Cuánto puede costar esta comida para que el dinero alcance justo hasta
       // el final. Se recalcula en cada turno, así que gastar de más ahora

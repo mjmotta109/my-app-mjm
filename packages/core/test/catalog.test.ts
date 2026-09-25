@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CATEGORIES, DEMO_PRICES, INGREDIENTS, INGREDIENT_BY_ID, RECIPES } from "@rinde/data";
+import { readFileSync } from "node:fs";
+import {
+  CATEGORIES, DEMO_PRICES, INGREDIENTS, INGREDIENT_BY_ID, RECIPES, TABLE_NUTRITION, TABLE_UNMATCHED,
+} from "@rinde/data";
 import { PriceIndex } from "../src/pricing.js";
 import { toBase } from "../src/units.js";
 import { DEMO_OBSERVED_ON } from "@rinde/data";
@@ -73,8 +76,59 @@ describe("integridad del catálogo", () => {
     }
   });
 
-  it("TODA la nutrición está marcada como estimada (§20)", () => {
-    for (const ingredient of INGREDIENTS) expect(ingredient.nutritionIsEstimated).toBe(true);
+  it("cada ingrediente dice de dónde sale su nutrición: tabla citada o estimación declarada (§20)", () => {
+    for (const ingredient of INGREDIENTS) {
+      const tabla = TABLE_NUTRITION[ingredient.id];
+      if (tabla) {
+        // Referenciado: no estimado, y la fuente nombra la fila exacta.
+        expect(ingredient.nutritionIsEstimated, ingredient.id).toBe(false);
+        expect(ingredient.nutritionSource, ingredient.id).toContain(`FDC ${tabla.fdcId}`);
+        // Un equivalente cercano lo dice en la propia fuente.
+        if (tabla.match === "cercano") expect(ingredient.nutritionSource).toContain("equivalente más cercano");
+      } else {
+        // Sin tabla: sigue siendo una estimación, y lo declara.
+        expect(ingredient.nutritionIsEstimated, ingredient.id).toBe(true);
+        expect(TABLE_UNMATCHED[ingredient.id], `${ingredient.id} no está en el emparejamiento`).toBeTruthy();
+      }
+    }
+  });
+
+  it("el emparejamiento cubre los 100 ingredientes, sin dejar ninguno sin decidir", () => {
+    const decididos = new Set([...Object.keys(TABLE_NUTRITION), ...Object.keys(TABLE_UNMATCHED)]);
+    expect(INGREDIENTS.filter((i) => !decididos.has(i.id)).map((i) => i.id)).toEqual([]);
+  });
+
+  it("los números del catálogo son los de la tabla, no una transcripción", () => {
+    // Se relee el CSV bajado de USDA y se compara fila por fila. Si alguien
+    // edita a mano el archivo generado, o regenera con otra tabla, esto falla.
+    const leer = (nombre: string) => {
+      const texto = readFileSync(new URL(`../../data/tablas/usda/${nombre}.csv`, import.meta.url), "utf-8");
+      const filas = new Map<string, string[]>();
+      for (const linea of texto.trim().split("\n").slice(1)) {
+        // La descripción puede traer comas entre comillas: se toma la primera
+        // columna y las seis numéricas del final.
+        const partes = linea.split(",");
+        filas.set(partes[0]!, partes.slice(-6, -1));
+      }
+      return filas;
+    };
+    const tablas: Record<string, Map<string, string[]>> = {
+      "SR Legacy": leer("sr_legacy"),
+      "Foundation": leer("foundation"),
+    };
+    for (const [id, dato] of Object.entries(TABLE_NUTRITION)) {
+      const clave = dato.table.includes("SR Legacy") ? "SR Legacy" : "Foundation";
+      const fila = tablas[clave]!.get(String(dato.fdcId));
+      expect(fila, `${id}: FDC ${dato.fdcId} no está en ${clave}`).toBeDefined();
+      const [kcal, proteina, grasa, carbohidratos] = fila!.map(Number);
+      expect(dato.kcal, id).toBeCloseTo(kcal!, 1);
+      expect(dato.proteinG, id).toBeCloseTo(proteina!, 2);
+      expect(dato.fatG, id).toBeCloseTo(grasa!, 2);
+      expect(dato.carbsG, id).toBeCloseTo(carbohidratos!, 2);
+    }
+  });
+
+  it("la nutrición de una RECETA siempre es estimada: cocinar cambia los números (§20)", () => {
     for (const recipe of RECIPES) expect(recipe.nutritionIsEstimated).toBe(true);
   });
 

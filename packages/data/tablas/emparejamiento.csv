@@ -1,0 +1,101 @@
+ingrediente,tabla,fdc_id,coincidencia,nota
+pollo_pechuga,sr_legacy,171077,exacto,
+pollo_muslo,sr_legacy,172385,exacto,
+pollo_entero,sr_legacy,171447,exacto,
+carne_molida,sr_legacy,174036,exacto,80% magra
+carne_res,sr_legacy,173982,cercano,la posta se aproxima con la bola (top round)
+cerdo_lomo,sr_legacy,168312,exacto,
+cerdo_costilla,sr_legacy,167853,exacto,
+atun_lata,foundation,334194,exacto,SR Legacy trae dos valores dispares (86 y 116 kcal); se usa el análisis más reciente
+tilapia,sr_legacy,175176,exacto,
+salchicha,sr_legacy,172968,cercano,salchicha genérica de carne
+chorizo,sr_legacy,173859,cercano,chorizo de cerdo crudo de estilo mexicano
+arroz_blanco,sr_legacy,168877,exacto,crudo
+lenteja,sr_legacy,172420,exacto,seca
+frijol_rojo,sr_legacy,173744,exacto,seco
+garbanzo,sr_legacy,173756,exacto,seco
+arveja_seca,sr_legacy,172428,cercano,la tabla trae la arveja seca partida
+pasta_espagueti,sr_legacy,169736,exacto,seca
+pasta_corta,sr_legacy,169736,exacto,seca
+avena_hojuelas,sr_legacy,169705,exacto,
+harina_maiz,sr_legacy,168922,cercano,harina de maíz desgerminada; la precocida no está en la tabla
+harina_trigo,sr_legacy,168894,exacto,
+pan_tajado,sr_legacy,174924,exacto,
+arepa,sr_legacy,168070,cercano,arepa de restaurante; la casera puede llevar menos grasa
+maiz_pira,sr_legacy,167959,cercano,maíz pira ya reventado sin aceite
+papa_pastusa,sr_legacy,170026,cercano,papa blanca genérica con cáscara; la variedad pastusa no está
+papa_criolla,,,sin_equivalente,Solanum phureja no está en las tablas de USDA
+yuca,sr_legacy,169985,exacto,
+platano_verde,sr_legacy,168215,exacto,
+platano_maduro,sr_legacy,169130,exacto,
+tomate,sr_legacy,170457,exacto,
+cebolla_cabezona,sr_legacy,170000,exacto,
+cebolla_larga,sr_legacy,170007,exacto,Welsh onion es Allium fistulosum: la misma especie
+zanahoria,sr_legacy,170393,exacto,
+ahuyama,sr_legacy,169295,cercano,butternut (Cucurbita moschata)
+habichuela,sr_legacy,169961,exacto,
+repollo,sr_legacy,169975,exacto,
+lechuga,sr_legacy,169249,cercano,lechuga de hoja verde
+pimenton,sr_legacy,170108,cercano,pimentón rojo; el verde trae algo menos de azúcar
+ajo,sr_legacy,169230,exacto,
+cilantro,sr_legacy,169997,exacto,
+espinaca,sr_legacy,168462,exacto,
+brocoli,sr_legacy,170379,exacto,
+arveja_verde,sr_legacy,170419,exacto,
+remolacha,sr_legacy,169145,exacto,
+pepino,sr_legacy,168409,exacto,
+banano,sr_legacy,173944,exacto,
+aguacate,sr_legacy,171705,exacto,promedio de variedades comerciales
+naranja,sr_legacy,169097,exacto,
+mango,sr_legacy,169910,exacto,
+papaya,sr_legacy,169926,exacto,
+guayaba,sr_legacy,173044,exacto,
+limon,sr_legacy,168155,exacto,el limón Tahití es una lima
+maracuya,sr_legacy,169108,cercano,la tabla trae la granadilla morada; el maracuyá colombiano es el amarillo
+mora,sr_legacy,173946,cercano,la mora de Castilla no es la misma especie que la blackberry
+pina,sr_legacy,169124,exacto,
+huevo,sr_legacy,171287,exacto,
+leche_entera,sr_legacy,171265,exacto,
+queso_campesino,sr_legacy,172223,cercano,queso fresco latinoamericano
+queso_costeno,,,sin_equivalente,ningún queso de la tabla se le parece lo suficiente
+yogurt,sr_legacy,171284,cercano,natural entero sin azúcar; muchos yogures del mercado traen azúcar
+kumis,,,sin_equivalente,ninguna leche fermentada de la tabla equivale
+mantequilla,sr_legacy,173410,exacto,
+aceite_girasol,sr_legacy,171025,exacto,
+azucar,sr_legacy,169655,exacto,
+panela,,,sin_equivalente,el azúcar morena de la tabla es azúcar refinada con melaza: no es panela
+chocolate_mesa,sr_legacy,167999,cercano,chocolate mexicano en tabletas (cacao azúcar y canela) como el de mesa
+cafe,,,sin_equivalente,la tabla no trae café molido seco; su aporte por taza es despreciable
+salsa_tomate,sr_legacy,168556,exacto,
+sal,sr_legacy,173468,exacto,
+pimienta,sr_legacy,170931,exacto,
+comino,sr_legacy,170923,exacto,
+color_azafran,,,sin_equivalente,el color es un colorante de achiote; el valor anterior era el del azafrán: otro producto
+oregano,sr_legacy,171328,exacto,
+laurel,sr_legacy,170917,exacto,
+champinones,sr_legacy,169251,exacto,
+calabacin,sr_legacy,169291,exacto,
+berenjena,sr_legacy,169228,exacto,
+apio,sr_legacy,169988,exacto,
+maiz_tierno,sr_legacy,169998,cercano,maíz dulce amarillo; la mazorca colombiana es menos dulce
+arracacha,,,sin_equivalente,no está en las tablas de USDA
+jengibre,sr_legacy,169231,exacto,
+quinua,sr_legacy,168874,exacto,
+tortilla_trigo,sr_legacy,175037,exacto,
+soya_texturizada,sr_legacy,174275,cercano,harina de soya desgrasada: la materia prima de la soya texturizada
+sardina_lata,sr_legacy,175139,exacto,
+jamon,sr_legacy,173864,cercano,jamón tajado regular (~11% de grasa)
+crema_leche,sr_legacy,170858,cercano,crema para batir liviana (~31% de grasa)
+queso_mozzarella,sr_legacy,170845,exacto,
+mani,sr_legacy,172430,exacto,crudo
+leche_coco,sr_legacy,170173,exacto,
+bocadillo,,,sin_equivalente,la tabla solo trae salsa de guayaba cocida: no es bocadillo
+lulo,sr_legacy,167790,exacto,
+salsa_soya,sr_legacy,174277,exacto,
+vinagre,sr_legacy,172237,exacto,
+mostaza,sr_legacy,172234,exacto,
+mayonesa,sr_legacy,171009,exacto,
+curry_polvo,sr_legacy,170924,exacto,
+paprika,sr_legacy,171329,exacto,
+canela,sr_legacy,171320,exacto,
+aji_picante,sr_legacy,170106,exacto,

@@ -347,6 +347,16 @@ export type ActivityLevel = "sedentario" | "ligero" | "moderado" | "alto" | "muy
 export type NutritionGoal = "mantener" | "bajar_peso" | "subir_peso" | "masa_muscular";
 
 /**
+ * De dónde salen las porciones.
+ *
+ * - `estandar`: de `adults` y `children`. Es el camino por defecto y no pide
+ *   ningún dato personal (D21).
+ * - `necesidades`: de la energía estimada de cada persona según su perfil
+ *   físico y su objetivo. Hay que elegirlo; dar el peso no lo activa solo.
+ */
+export type PortionBasis = "estandar" | "necesidades";
+
+/**
  * Perfil físico de una persona del hogar. **Todos los campos son opcionales**
  * a propósito (§27): Rinde funciona sin pedir peso, estatura ni edad. Si el
  * usuario los da, se usan para estimar necesidades energéticas; si no, se usa
@@ -395,6 +405,8 @@ export interface Household {
    * Separarlos evita que dar el peso cambie cuánta comida se cocina.
    */
   nutritionProfiles?: PersonProfile[];
+  /** Sin definir = `estandar`. Ver `PortionBasis`. */
+  portionBasis?: PortionBasis;
 }
 
 export interface InventoryItem {
@@ -525,6 +537,12 @@ export interface PlanDiagnostics {
   mealsBelowNutritionFloor: number;
   /** Energía media por persona y día del plan. `null` si no se pudo estimar. */
   averageKcalPerPersonPerDay: number | null;
+  /** De dónde salieron las porciones de este plan. */
+  portionBasis: PortionBasis;
+  /** Raciones de adulto de referencia que se cocinaron por comida. */
+  portionEquivalents: number;
+  /** Las que habría con porciones estándar, para poder comparar. */
+  standardPortionEquivalents: number;
   /** Pasos de reparación ejecutados para intentar caber en el presupuesto. */
   repairSteps: string[];
   warnings: string[];

@@ -1,5 +1,6 @@
 import type { BaseUnit, CategoryId, Ingredient, IngredientTag, PackSize, Unit } from "@rinde/core";
 import { NUTRITION_SOURCE } from "./nutrition-note.js";
+import { TABLE_NUTRITION } from "./nutrition-table.generated.js";
 
 /**
  * Catálogo de ingredientes con nombres y presentaciones de uso común en
@@ -48,24 +49,56 @@ function build(spec: Spec): Ingredient {
     packSizes,
     perishable: spec.fresh ?? false,
     tags: spec.tags,
-    nutritionIsEstimated: true,
+    ...nutricionDe(spec),
     ...(spec.gpu !== undefined ? { gramsPerUnit: spec.gpu } : {}),
     ...(spec.gpml !== undefined ? { gramsPerMl: spec.gpml } : {}),
     ...(spec.shelf !== undefined ? { shelfLifeDays: spec.shelf } : {}),
     ...(spec.subs ? { substitutes: spec.subs } : {}),
     ...(spec.syn ? { synonyms: spec.syn } : {}),
-    ...(spec.n
-      ? {
-          nutrition: {
-            kcal: spec.n[0],
-            proteinG: spec.n[1],
-            carbsG: spec.n[2],
-            fatG: spec.n[3],
-            fiberG: spec.n[4],
-          },
-          nutritionSource: NUTRITION_SOURCE,
-        }
-      : {}),
+  };
+}
+
+/**
+ * Nutrición de un ingrediente, en orden de preferencia:
+ *
+ *   1. La tabla de composición (USDA FoodData Central), cuando el ingrediente
+ *      tiene un alimento emparejado en `tablas/emparejamiento.csv`. Es un dato
+ *      referenciado: `nutritionIsEstimated` pasa a `false` y la fuente dice
+ *      exactamente qué fila de qué tabla se usó.
+ *   2. La aproximación vieja del catálogo, marcada como estimada, para los
+ *      ingredientes que la tabla no trae (los más colombianos: panela, papa
+ *      criolla, arracacha, bocadillo…).
+ */
+function nutricionDe(
+  spec: Spec,
+): Pick<Ingredient, "nutrition" | "nutritionSource" | "nutritionIsEstimated"> {
+  const tabla = TABLE_NUTRITION[spec.id];
+  if (tabla) {
+    return {
+      nutrition: {
+        kcal: tabla.kcal,
+        proteinG: tabla.proteinG,
+        carbsG: tabla.carbsG,
+        fatG: tabla.fatG,
+        ...(tabla.fiberG !== undefined ? { fiberG: tabla.fiberG } : {}),
+      },
+      nutritionSource:
+        `${tabla.table}, FDC ${tabla.fdcId}: "${tabla.description}"` +
+        (tabla.match === "cercano" ? ` — equivalente más cercano (${tabla.note ?? "no es el mismo producto"})` : ""),
+      nutritionIsEstimated: false,
+    };
+  }
+  if (!spec.n) return { nutritionIsEstimated: true };
+  return {
+    nutrition: {
+      kcal: spec.n[0],
+      proteinG: spec.n[1],
+      carbsG: spec.n[2],
+      fatG: spec.n[3],
+      fiberG: spec.n[4],
+    },
+    nutritionSource: NUTRITION_SOURCE,
+    nutritionIsEstimated: true,
   };
 }
 

@@ -14,3 +14,4 @@ export {
   DEMO_NOTICE, DEMO_OBSERVED_ON, DEMO_PREVIOUS_WEEK, DEMO_WEEK, DEMO_CITY,
 } from "./prices.js";
 export { NUTRITION_SOURCE, NUTRITION_DISCLAIMER } from "./nutrition-note.js";
+export { TABLE_NUTRITION, TABLE_UNMATCHED, type TableNutrition } from "./nutrition-table.generated.js";

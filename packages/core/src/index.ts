@@ -64,7 +64,9 @@ export {
   MIFFLIN_ST_JEOR, ACTIVITY_FACTORS, ACTIVITY_LABELS, GOAL_ADJUSTMENT, GOAL_LABELS,
   PROTEIN_G_PER_KG, KCAL_FLOOR, FIBER_TARGET_G, GENERIC_ADULT, CHILD_ENERGY_FACTOR,
   NUTRITION_DISCLAIMER_SHORT, mealFloor, mealTarget, MEAL_MIN_SHARE, MEAL_TARGET_SHARE,
-  type EnergyNeeds, type HouseholdNeeds, type ProteinRange, type MealFloor,
+  portionSizing, bodyMassIndex, deficitBlockedReason,
+  MAX_DEFICIT_KCAL, BMI_UNDERWEIGHT, MIN_AGE_FOR_DEFICIT,
+  type EnergyNeeds, type HouseholdNeeds, type ProteinRange, type MealFloor, type PortionSizing,
 } from "./nutrition-needs.js";
 
 export {

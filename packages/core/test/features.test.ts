@@ -148,8 +148,11 @@ describe("sustituciones (§21)", () => {
     const lenteja = INGREDIENT_BY_ID.get("lenteja")!;
     const equivalent = equivalentQuantity(carne, lenteja, 500)!;
     expect(equivalent.basis).toBe("protein");
-    // 500 g de res (21 g/100 g) = 105 g de proteína ≈ 407 g de lenteja (25,8 g/100 g)
-    expect(equivalent.qtyBase).toBeCloseTo(407, 0);
+    // Con los valores de USDA SR Legacy: 500 g de res (23,45 g/100 g) = 117,25 g
+    // de proteína ≈ 476 g de lenteja seca (24,63 g/100 g). Por peso serían 500.
+    const proteina = (500 / 100) * carne.nutrition!.proteinG;
+    expect(equivalent.qtyBase).toBeCloseTo((proteina / lenteja.nutrition!.proteinG) * 100, 1);
+    expect(equivalent.qtyBase).toBeCloseTo(476, 0);
   });
 
   it("cambiar carne por lentejas ahorra dinero y lo dice con números reales", () => {
