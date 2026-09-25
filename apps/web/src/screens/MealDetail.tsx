@@ -29,6 +29,11 @@ export function MealDetail(): React.JSX.Element {
   }
 
   const scale = scaleRecipe(recipe, meal.servings, INGREDIENT_BY_ID);
+  // `servings` son raciones de adulto de referencia: con porciones ajustadas
+  // salen cifras como 1,72, que no son personas. En pantalla se habla de
+  // personas y se aclara que las porciones están ajustadas.
+  const personas = (state.household?.adults ?? 0) + (state.household?.children ?? 0);
+  const porcionesAjustadas = state.plan?.diagnostics.portionBasis === "necesidades";
   // El aporte lo trae la comida, no se recalcula desde la receta del catálogo:
   // si el planificador cambió un ingrediente, la receta original ya no describe
   // lo que se va a cocinar.
@@ -66,7 +71,7 @@ export function MealDetail(): React.JSX.Element {
         <div className="malla-3">
           <Card><div className="etiqueta">Tiempo</div><div className="cifra cifra--md">{recipe.minutes} min</div></Card>
           <Card><div className="etiqueta">Dificultad</div><div className="cifra cifra--md" style={{ fontSize: 16 }}>{DIFICULTAD[recipe.difficulty]}</div></Card>
-          <Card><div className="etiqueta">Porciones</div><div className="cifra cifra--md">{meal.servings}</div></Card>
+          <Card><div className="etiqueta">Personas</div><div className="cifra cifra--md">{personas}</div></Card>
         </div>
 
         <Card tone="verde">
@@ -94,7 +99,8 @@ export function MealDetail(): React.JSX.Element {
           <div className="grupo-titulo">
             <span>Ingredientes</span>
             <span className="tenue" style={{ textTransform: "none", letterSpacing: 0 }}>
-              para {meal.servings}
+              para {personas} {personas === 1 ? "persona" : "personas"}
+              {porcionesAjustadas ? " · porciones ajustadas" : ""}
             </span>
           </div>
           <div className="tarjeta tarjeta--plana">
@@ -152,7 +158,11 @@ export function MealDetail(): React.JSX.Element {
               <Dato label="Grasa" value={`${nutrition.fatG} g`} />
             </div>
             <p className="diminuto tenue" style={{ marginTop: 12 }}>
-              Total de la receta ({meal.servings} porciones), sumando ingredientes crudos. No
+              Total de la comida para {personas} {personas === 1 ? "persona" : "personas"}
+              {porcionesAjustadas
+                ? ` (${meal.servings.toLocaleString("es-CO")} raciones de adulto de referencia, ajustadas a cada perfil)`
+                : ""}
+              , sumando ingredientes crudos. No
               considera pérdidas por cocción. Rinde no es una herramienta médica ni dietética.
             </p>
           </Card>

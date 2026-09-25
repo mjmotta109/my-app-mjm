@@ -107,6 +107,23 @@ describe("porciones: el objetivo cambia la compra solo si se elige", () => {
   });
 });
 
+describe("la meta del hogar es de TODO el hogar", () => {
+  it("con un solo perfil en un hogar de dos adultos, el otro cuenta con la referencia", () => {
+    // Antes la meta del hogar era solo la de quien tenía perfil, y de ella
+    // salen los pisos de cada comida: el hogar quedaba con pisos de una persona.
+    const h = hogar({ nutritionProfiles: [ana("bajar_peso")] });
+    const n = householdNeeds(h);
+    expect(n.kcal).toBe(personEnergyNeeds(ana("bajar_peso")).targetKcal + GENERIC_ADULT.kcal);
+    expect(n.anyGeneric).toBe(true);
+    expect(n.warnings.join(" ")).toContain("sin perfil físico");
+  });
+
+  it("los perfiles de más no se suman", () => {
+    const h = hogar({ adults: 1, nutritionProfiles: [ana(), beto()] });
+    expect(householdNeeds(h).kcal).toBe(personEnergyNeeds(ana()).targetKcal);
+  });
+});
+
 describe("barandas: a quién Rinde NO le propone un déficit", () => {
   const casos: [string, PersonProfile][] = [
     ["un niño", { ...ana("bajar_peso"), kind: "nino", ageYears: 10, weightKg: 40, heightCm: 140 }],

@@ -83,6 +83,15 @@ export function today(): string {
   return local.toISOString().slice(0, 10);
 }
 
+/**
+ * Genera un plan sin guardarlo. Lo usa Ajustes para comparar lo que cuesta el
+ * mes con porciones estándar frente a porciones según cada persona: el ahorro
+ * que se muestra es el de dos planes reales, no una regla de tres.
+ */
+export function simulatePlan(household: Household, inventory: InventoryItem[]): MealPlan {
+  return buildPlan(household, inventory);
+}
+
 function buildPlan(household: Household, inventory: InventoryItem[]): MealPlan {
   return generateMealPlan({
     household,

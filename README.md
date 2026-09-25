@@ -88,6 +88,14 @@ npm run e2e                                  # recorre el flujo completo
 - **Necesidades según tu estado físico** (opcional): energía y proteína
   estimadas con Mifflin-St Jeor y factores de actividad, con piso de seguridad
   y fuentes citadas.
+- **Mantener o bajar de peso** (opcional): las porciones se ajustan a lo que
+  estima el perfil de cada persona y el plan compra en consecuencia. Con los
+  datos demo, bajar de peso los dos adultos ahorra un 15 % del mes. No se aplica
+  déficit a niños, menores, embarazo, lactancia, condición médica ni IMC bajo.
+- **Nutrición de tabla, no de memoria**: 92 de 100 ingredientes toman sus
+  valores de USDA FoodData Central, bajada de la fuente oficial por CI con su
+  huella SHA-256. Los 8 restantes (los más colombianos) siguen marcados como
+  estimados; ver `docs/NUTRICION.md`.
 - **Plan completo**: 30 días × 3 comidas para 2 personas sale en menos de un
   segundo, con entre 27 y 31 recetas distintas, ninguna repetida dos días seguidos
   ni más

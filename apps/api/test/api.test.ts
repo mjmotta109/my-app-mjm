@@ -411,9 +411,12 @@ describe("cocinar por adelantado y nutrición", () => {
       method: "GET", url: `/households/${prepHouseholdId}/nutrition`,
     });
     const body = response.json();
-    expect(body.needs.anyGeneric).toBe(false);
     expect(body.needs.perPerson[0].needs.bmrKcal).toBe(1308);
     expect(body.needs.perPerson[0].needs.basis).toMatch(/Mifflin-St Jeor/);
+    // El hogar tiene dos adultos y solo uno dio su perfil: el otro cuenta con
+    // la referencia genérica, y la meta del hogar es la de los dos.
+    expect(body.needs.anyGeneric).toBe(true);
+    expect(body.needs.kcal).toBe(body.needs.perPerson[0].needs.targetKcal + 2000);
   });
 });
 

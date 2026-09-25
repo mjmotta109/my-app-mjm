@@ -689,3 +689,119 @@ no estaba en el plato.
   proponer disparates.
 - La comida solo declara los cambios que aparecen en **sus líneas**. Se avisa de
   lo que se va a cocinar, no de lo que el catálogo consideró.
+
+---
+
+## D33 — La tabla de composición se baja de la fuente, no se transcribe 📊
+
+Hasta aquí, la nutrición de los 100 ingredientes eran aproximaciones escritas a
+mano y marcadas como estimadas, porque la política de red del contenedor deniega
+`fdc.nal.usda.gov`, `www.icbf.gov.co` y `www.fao.org`. Para ajustar porciones a
+una meta de peso, esa era la base más débil del proyecto.
+
+Se resolvió como el SDK de Android (D26): **un workflow de GitHub Actions**
+(`tablas-nutricion.yml`) baja la tabla desde el runner, que sí tiene salida.
+Reglas del workflow:
+
+- El enlace no se escribe a mano: se descubre en la página oficial de
+  descargas. Si cambia y no aparece, el job falla.
+- Cada archivo queda con su SHA-256 y el enlace a la ejecución que lo bajó.
+- Los nutrientes se buscan por **nombre y unidad** en el propio volcado, no por
+  un identificador recordado.
+- Lo que la tabla no midió queda vacío, nunca en cero.
+- La licencia se copia del sitio; si no aparece, se dice que no apareció. **No
+  apareció**, así que no se afirma.
+
+El **emparejamiento** (qué ingrediente es qué alimento de la tabla) se decidió a
+mano y vive en `tablas/emparejamiento.csv`, donde se puede revisar y discutir:
+72 exactos, 20 equivalentes cercanos que lo dicen en su propia fuente, 8 sin
+equivalente. Un generador copia los números; una prueba relee el CSV de USDA y
+los compara uno por uno.
+
+La tabla corrigió errores del catálogo: el plátano verde tenía el valor del
+maduro, la ahuyama era otra calabaza y "el color" traía la composición del
+azafrán.
+
+### La tabla del ICBF no se usa, y por qué
+
+La exploración encontró la **Tabla de Composición de Alimentos Colombianos**
+del ICBF: es la fuente correcta para los 8 ingredientes que USDA no trae (papa
+criolla, panela, arracacha, bocadillo, kumis, queso costeño). Pero sus tres PDF
+traen el permiso **`copy:no`**. `pdftotext` lo ignora y una corrida extrajo el
+texto; **se borró sin haber tomado un valor**, y el workflow ya no extrae nada
+de un PDF que lo prohíba. Que se pueda técnicamente no quiere decir que esté
+permitido. Usarla requiere un permiso o una versión de datos abiertos del ICBF.
+
+Ese texto sigue en el historial de git (commit `0beedf9`) hasta que se decida
+purgarlo, que exige reescribir la rama.
+
+---
+
+## D34 — Bajar de peso tiene que cambiar la compra, o no ahorra nada ⚖️
+
+El objetivo `bajar_peso` existía desde D21, pero las porciones salían siempre de
+adultos y niños: elegirlo cambiaba las metas y **ni un gramo de lo que se
+compra**. La opción "ahorrar y bajar de peso" era, en la práctica, decorativa.
+
+Ahora el hogar puede elegir **porciones según cada persona**. Sigue siendo una
+elección explícita: D21 se mantiene y dar el peso no cambia nada por sí solo.
+
+### El ahorro que se evaporaba
+
+La primera versión reducía las porciones un 14 % y el gasto solo un 4 %. No era
+el empaque: el valor de lo comido también bajaba solo un 4,6 %. Era el
+planificador, que apunta a usar el presupuesto: con menos comida que comprar,
+**reinvertía la diferencia en platos más caros** y se comía el 70 % del ahorro.
+
+Para una opción que se llama "ahorrar", eso la contradice. Con porciones
+reducidas, el gasto objetivo del plan baja en la misma proporción, y la escalera
+de presión apunta a ese presupuesto escalado, no al total (parar en cuanto cabía
+en el total dejaba $120.000 en paquetes abiertos).
+
+Medido con la tabla de USDA, hogar de 2 adultos (Ana, 30 años, 68 kg,
+sedentaria; Beto, 34 años, 80 kg, actividad ligera):
+
+| Porciones | Raciones/comida | Gasto del mes | kcal/persona/día | Bajo el piso |
+|---|---|---|---|---|
+| Estándar | 2,00 | $840.260 | 1.995 | 0 |
+| Según cada uno, ambos mantienen | 2,02 | $841.952 | 1.967 | 0 |
+| Según cada uno, Ana baja | 1,89 | $796.796 | 1.908 | 0 |
+| Según cada uno, ambos bajan | 1,72 | $710.732 | 1.789 | 0 |
+
+Mantener cuesta prácticamente lo mismo que las porciones estándar; bajar de
+peso los dos ahorra un 15 %. Precios de demostración: las cifras dicen cuánto
+cambia, no cuánto cuesta comer en Colombia.
+
+### Barandas
+
+Rinde **no aplica déficit**, aunque se pida, a niños, menores de 18, embarazo,
+lactancia, condición médica registrada, IMC por debajo de 18,5, ni a quien no dio
+peso, estatura y edad. En cada caso lo dice. El déficit se queda en el 15 % con
+tope de 500 kcal, nunca baja del piso calórico de su sexo y no toca la meta de
+proteína.
+
+**El aviso de presupuesto excedido nunca propone bajar de peso.** Bajar de peso
+es una decisión de salud de cada persona; convertirlo en una sugerencia para
+cuadrar las cuentas sería empujar a alguien a comer menos por plata. Hay una
+prueba que lo fija.
+
+### Menos opciones, no más
+
+La interfaz ofrece los dos objetivos que se pidieron: mantener y bajar de peso.
+Los otros dos que ya existían en el código (subir de peso, masa muscular) solo
+aparecen si un perfil guardado los tiene.
+
+---
+
+## D35 — La meta del hogar era la de quien dio su perfil 🐛
+
+La captura de la pantalla nueva mostró "Meta diaria del hogar: 1.723 kcal" para
+un hogar de **dos** adultos. Con perfiles cargados, `householdNeeds` sumaba solo
+a quienes tenían perfil e ignoraba al resto. De esa cifra salen los pisos
+nutricionales de cada comida, así que un hogar donde solo una persona llenó sus
+datos quedaba planificado con pisos de una persona.
+
+Ahora quien no tiene perfil cuenta con la referencia genérica, igual que en las
+porciones, y los perfiles de más no se suman. El error existía desde D21; una
+prueba de la API lo daba por bueno (`anyGeneric: false` con un perfil para dos
+adultos) y se corrigió para afirmar lo correcto.

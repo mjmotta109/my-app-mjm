@@ -412,24 +412,44 @@ export function householdNeeds(household: Household): HouseholdNeeds {
     };
   }
 
-  const perPerson = profiles.map((profile) => ({
+  // Se cuentan como mucho tantos perfiles como personas haya de cada tipo, y
+  // quien no tiene perfil entra con la referencia genérica. Antes solo se
+  // sumaban los perfiles: un hogar de dos adultos con un solo perfil tenía una
+  // "meta del hogar" de una persona, y de esa cifra salen los pisos de cada
+  // comida.
+  const adultos = profiles.filter((p) => p.kind === "adulto").slice(0, household.adults);
+  const ninos = profiles.filter((p) => p.kind === "nino").slice(0, household.children);
+  const perPerson = [...adultos, ...ninos].map((profile) => ({
     profileId: profile.id,
     ...(profile.name ? { name: profile.name } : {}),
     needs: personEnergyNeeds(profile),
   }));
 
+  const faltanAdultos = Math.max(0, household.adults - adultos.length);
+  const faltanNinos = Math.max(0, household.children - ninos.length);
+  const sinPerfil = faltanAdultos + faltanNinos * CHILD_ENERGY_FACTOR;
+
   const warnings = [...new Set(perPerson.flatMap((entry) => entry.needs.warnings))];
+  if (sinPerfil > 0) {
+    warnings.push(
+      `${faltanAdultos + faltanNinos} persona(s) del hogar sin perfil físico se cuentan con la ` +
+        "referencia genérica.",
+    );
+  }
 
   return {
-    kcal: perPerson.reduce((total, entry) => total + entry.needs.targetKcal, 0),
+    kcal: Math.round(
+      perPerson.reduce((total, entry) => total + entry.needs.targetKcal, 0) +
+        GENERIC_ADULT.kcal * sinPerfil,
+    ),
     proteinG: {
-      minG: perPerson.reduce((total, entry) => total + entry.needs.proteinG.minG, 0),
-      targetG: perPerson.reduce((total, entry) => total + entry.needs.proteinG.targetG, 0),
-      maxG: perPerson.reduce((total, entry) => total + entry.needs.proteinG.maxG, 0),
+      minG: Math.round(perPerson.reduce((t, e) => t + e.needs.proteinG.minG, 0) + GENERIC_ADULT.proteinG * sinPerfil),
+      targetG: Math.round(perPerson.reduce((t, e) => t + e.needs.proteinG.targetG, 0) + GENERIC_ADULT.proteinG * sinPerfil),
+      maxG: Math.round(perPerson.reduce((t, e) => t + e.needs.proteinG.maxG, 0) + GENERIC_ADULT.proteinG * 1.5 * sinPerfil),
     },
-    fiberG: perPerson.reduce((total, entry) => total + entry.needs.fiberG, 0),
+    fiberG: Math.round(perPerson.reduce((total, entry) => total + entry.needs.fiberG, 0) + FIBER_TARGET_G * sinPerfil),
     perPerson,
-    anyGeneric: perPerson.some((entry) => entry.needs.usedGenericReference),
+    anyGeneric: sinPerfil > 0 || perPerson.some((entry) => entry.needs.usedGenericReference),
     warnings,
   };
 }

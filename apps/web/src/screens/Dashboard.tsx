@@ -101,6 +101,7 @@ export function Dashboard(): React.JSX.Element {
               <ComidaDelDia
                 key={meal.id}
                 meal={meal}
+                personas={Math.max(1, personas)}
                 // Solo la siguiente comida pendiente lleva el botón principal.
                 // Tres botones verdes idénticos vuelven a poner a la persona a
                 // elegir, que es justo lo que esta pantalla evita.
@@ -140,6 +141,13 @@ export function Dashboard(): React.JSX.Element {
                 tone={excedido ? "alerta" : usoPct > 0.9 ? "aviso" : "ok"}
               />
             </div>
+            {plan.diagnostics.portionBasis === "necesidades" && (
+              <p className="diminuto tenue" style={{ marginBottom: 6 }}>
+                Porciones ajustadas a cada persona:{" "}
+                {plan.diagnostics.portionEquivalents.toLocaleString("es-CO")} raciones por comida en
+                vez de {plan.diagnostics.standardPortionEquivalents.toLocaleString("es-CO")}.
+              </p>
+            )}
             <div className="fila fila--entre pequeno tenue">
               <span>Presupuesto {formatCop(household.budgetCop)}</span>
               <span>{promedio === null ? "—" : `${formatCop(promedio)} por comida y persona`}</span>
@@ -226,9 +234,11 @@ export function Dashboard(): React.JSX.Element {
 
 /** Una comida del día, con lo único que se hace con ella: verla o cocinarla. */
 function ComidaDelDia({
-  meal, esLaSiguiente, onCocinar,
+  meal, personas, esLaSiguiente, onCocinar,
 }: {
   meal: Meal;
+  /** Personas del hogar. Con porciones ajustadas, `servings` no son personas. */
+  personas: number;
   esLaSiguiente: boolean;
   onCocinar: () => void;
 }): React.JSX.Element {
@@ -243,7 +253,7 @@ function ComidaDelDia({
           <h3 style={{ marginTop: 2 }}>{receta?.name ?? meal.recipeId}</h3>
           <p className="pequeno tenue" style={{ marginTop: 4 }}>
             {receta ? `${receta.minutes} min · ` : ""}
-            {Math.round(meal.nutrition.kcal / Math.max(1, meal.servings))} kcal por porción
+            {Math.round(meal.nutrition.kcal / Math.max(1, personas))} kcal por persona
             {" · "}
             {formatCop(meal.costPerPersonCop)} por persona
           </p>

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ACTIVITY_LABELS, GOAL_LABELS, NUTRITION_DISCLAIMER_SHORT,
-  householdNeeds, personEnergyNeeds,
+  formatCop, householdNeeds, personEnergyNeeds,
 } from "@rinde/core";
-import type { ActivityLevel, NutritionGoal, PersonProfile, Sex } from "@rinde/core";
-import { createProfile, useStore } from "../state/store.js";
+import type { ActivityLevel, NutritionGoal, PersonProfile, PortionBasis, Sex } from "@rinde/core";
+import { createProfile, simulatePlan, useStore } from "../state/store.js";
 import { Badge, Card, Empty, Header, Notice } from "../components/ui.js";
 
 /**
@@ -22,6 +22,15 @@ export function PhysicalProfile(): React.JSX.Element {
   const household = state.household;
   const [abierto, setAbierto] = useState<string | null>(null);
 
+  // Lo que costaría el mismo mes con porciones estándar, para poder decir
+  // cuánto cambia de verdad. Son dos planes reales, no una proporción.
+  const comparacion = useMemo(() => {
+    const h = state.household;
+    if (!h || (h.portionBasis ?? "estandar") !== "necesidades" || !state.plan) return null;
+    const estandar = simulatePlan({ ...h, portionBasis: "estandar" }, state.inventory);
+    return { estandar: estandar.projectedSpendCop, actual: state.plan.projectedSpendCop };
+  }, [state.household, state.inventory, state.plan]);
+
   if (!household) {
     return (
       <>
@@ -33,6 +42,7 @@ export function PhysicalProfile(): React.JSX.Element {
 
   const perfiles = household.nutritionProfiles ?? [];
   const needs = householdNeeds(household);
+  const basis: PortionBasis = household.portionBasis ?? "estandar";
 
   function guardar(perfiles: PersonProfile[]): void {
     dispatch({ type: "setNutritionProfiles", profiles: perfiles });
@@ -51,6 +61,63 @@ export function PhysicalProfile(): React.JSX.Element {
           das estos datos, las metas de energía y proteína se ajustan a tu hogar en vez de usar
           una referencia genérica. Se guardan solo en este dispositivo.
         </Notice>
+
+        {/* ---------------------------------------------------- porciones */}
+        <section>
+          <div className="grupo-titulo"><span>¿Cuánto se cocina?</span></div>
+          <div className="pila" style={{ gap: 8 }}>
+            <OpcionPorciones
+              activa={basis === "estandar"}
+              titulo="Porciones estándar"
+              descripcion="Una ración de adulto por persona. No hace falta ningún dato personal."
+              onClick={() => dispatch({ type: "updateHousehold", patch: { portionBasis: "estandar" } })}
+            />
+            <OpcionPorciones
+              activa={basis === "necesidades"}
+              titulo="Según cada persona"
+              descripcion="Cada quien come lo que estima su perfil, para mantener el peso o para bajarlo. Si alguien baja de peso, se cocina y se compra menos."
+              onClick={() => dispatch({ type: "updateHousehold", patch: { portionBasis: "necesidades" } })}
+            />
+          </div>
+
+          {basis === "necesidades" && perfiles.length === 0 && (
+            <div style={{ marginTop: 12 }}>
+              <Notice tone="info">
+                Agrega abajo a las personas del hogar. Mientras no haya perfiles, se cocinan
+                porciones estándar.
+              </Notice>
+            </div>
+          )}
+
+          {basis === "necesidades" && state.plan && comparacion && (
+            <Card>
+              <div className="etiqueta">Lo que cambia en tu mes</div>
+              <div className="fila fila--entre" style={{ marginTop: 8 }}>
+                <div>
+                  <div className="diminuto tenue">Raciones por comida</div>
+                  <span className="cifra cifra--md">
+                    {state.plan.diagnostics.portionEquivalents.toLocaleString("es-CO")}
+                  </span>
+                  <span className="diminuto tenue">
+                    {" "}de {state.plan.diagnostics.standardPortionEquivalents.toLocaleString("es-CO")}
+                  </span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div className="diminuto tenue">Gasto del mes</div>
+                  <span className="cifra cifra--md">{formatCop(comparacion.actual)}</span>
+                  <div className={`diminuto ${comparacion.actual <= comparacion.estandar ? "positivo" : "negativo"}`}>
+                    {comparacion.actual <= comparacion.estandar ? "−" : "+"}
+                    {formatCop(Math.abs(comparacion.estandar - comparacion.actual))} frente a porciones estándar
+                  </div>
+                </div>
+              </div>
+              <p className="diminuto tenue" style={{ marginTop: 10 }}>
+                Comparado contra un plan real con porciones estándar, no con una regla de tres. Los
+                paquetes se venden enteros, así que el ahorro no siempre es proporcional.
+              </p>
+            </Card>
+          )}
+        </section>
 
         {/* ------------------------------------------------------- resumen */}
         <Card tone="verde">
@@ -109,7 +176,7 @@ export function PhysicalProfile(): React.JSX.Element {
                         <div className="pequeno tenue">
                           {calc.usedGenericReference
                             ? `Referencia genérica · faltan ${calc.missing.join(", ")}`
-                            : `${calc.targetKcal} kcal · ${calc.proteinG.targetG} g de proteína`}
+                            : `${GOAL_LABELS[calc.appliedGoal]} · ${calc.targetKcal} kcal · ${calc.proteinG.targetG} g de proteína`}
                         </div>
                       </span>
                       <span className="tenue" aria-hidden="true">{editando ? "▾" : "›"}</span>
@@ -190,7 +257,7 @@ export function PhysicalProfile(): React.JSX.Element {
                         <div className="campo">
                           <span className="etiqueta">Objetivo</span>
                           <div className="chip-fila" style={{ flexWrap: "wrap", overflowX: "visible" }}>
-                            {(Object.keys(GOAL_LABELS) as NutritionGoal[]).map((valor) => (
+                            {objetivosVisibles(perfil.goal).map((valor) => (
                               <button
                                 key={valor}
                                 type="button"
@@ -226,6 +293,10 @@ export function PhysicalProfile(): React.JSX.Element {
                             })}
                           </div>
                         </div>
+
+                        {calc.goalNotApplied && (
+                          <Notice tone="alerta"><span className="pequeno">{calc.goalNotApplied}</span></Notice>
+                        )}
 
                         {!calc.usedGenericReference && (
                           <Notice tone="info"><span className="pequeno">{calc.basis}</span></Notice>
@@ -320,3 +391,38 @@ const FLAG_LABELS: Record<string, string> = {
   lactancia: "Lactancia",
   condicion_medica: "Condición médica",
 };
+
+/**
+ * Los objetivos que se ofrecen. Se pidieron dos —mantener y bajar de peso— y
+ * son los únicos que aparecen: más opciones es justo lo que sobraba. Si un
+ * perfil guardado tiene otro (subir de peso, masa muscular), se muestra también
+ * para no esconder lo que la persona eligió antes.
+ */
+function objetivosVisibles(actual: NutritionGoal): NutritionGoal[] {
+  const base: NutritionGoal[] = ["mantener", "bajar_peso"];
+  return base.includes(actual) ? base : [...base, actual];
+}
+
+function OpcionPorciones({
+  activa, titulo, descripcion, onClick,
+}: {
+  activa: boolean;
+  titulo: string;
+  descripcion: string;
+  onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`opcion ${activa ? "opcion--activa" : ""}`}
+      aria-pressed={activa}
+      onClick={onClick}
+    >
+      <span className="opcion__marca" aria-hidden="true">{activa ? "✓" : ""}</span>
+      <span className="crecer">
+        <strong>{titulo}</strong>
+        <div className="pequeno tenue">{descripcion}</div>
+      </span>
+    </button>
+  );
+}

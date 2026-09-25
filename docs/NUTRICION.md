@@ -15,16 +15,60 @@ Dos anexos, porque son dos problemas distintos con fuentes distintas:
 
 ## A.1 De dónde salen los valores
 
-De **aproximaciones de composición de alimentos de uso general**. No se
-transcribieron de la Tabla de Composición de Alimentos Colombianos del ICBF ni
-de ninguna otra base verificada, porque no se pudo consultar ninguna desde el
-entorno donde se construyó el catálogo.
+De la **tabla de composición de alimentos de USDA FoodData Central**, bajada de
+la fuente oficial por CI (`.github/workflows/tablas-nutricion.yml`), para **92
+de los 100 ingredientes**. Los 8 restantes siguen siendo aproximaciones y
+siguen marcados como estimados.
 
-Por eso **los 100 ingredientes llevan `nutritionIsEstimated: true`**, sin
-excepción, y la interfaz muestra siempre la etiqueta "Estimada".
+| Estado | Ingredientes | Qué significa |
+|---|---|---|
+| Exacto | 72 | El mismo alimento, en la misma forma (crudo, seco, enlatado) |
+| Equivalente más cercano | 20 | La tabla no trae el producto; se usa el más parecido y **se dice cuál** |
+| Sin equivalente | 8 | Papa criolla, panela, arracacha, bocadillo, kumis, queso costeño, el color y el café. Siguen estimados |
 
-Poner `false` en esa marca exige reemplazar los valores por datos de una fuente
-citada, **ingrediente por ingrediente**. No es un interruptor global.
+Dónde está cada cosa, para poder auditarla:
+
+- **`packages/data/tablas/usda/FUENTE.md`** — URL de cada archivo, su SHA-256,
+  fecha de descarga y enlace a la ejecución de CI que lo bajó.
+- **`packages/data/tablas/usda/sr_legacy.csv`** y **`foundation.csv`** — los
+  cinco nutrientes que usa Rinde, por 100 g, de los 7.793 alimentos de SR Legacy
+  (2018-04) y los 378 de Foundation Foods (2026-04). Lo que la tabla no midió
+  queda vacío, no en cero.
+- **`packages/data/tablas/emparejamiento.csv`** — qué ingrediente es qué fila de
+  la tabla. Se decidió **a mano, ingrediente por ingrediente**, y cada
+  equivalente cercano lleva una nota (la posta se aproxima con la bola; el
+  maracuyá de la tabla es la granadilla morada; la harina de maíz precocida no
+  está y se usa la desgerminada).
+- **`scripts/tablas/generar_nutricion.py`** — copia los números de la fila
+  elegida. No decide nada. Una prueba relee el CSV y los compara uno por uno.
+
+En la app, cada ingrediente trae en `nutritionSource` la tabla, el número FDC y
+la descripción textual del alimento usado; si es un equivalente cercano, lo dice
+en esa misma cadena.
+
+### Lo que la tabla corrigió
+
+El catálogo viejo tenía errores que la tabla destapó: el plátano verde traía el
+valor del maduro (122 kcal; la tabla dice 152), la ahuyama era la de la calabaza
+de otra especie (26 → 45 kcal, butternut) y "el color" traía la composición del
+azafrán, que es otro producto.
+
+### Límites que no se van con la tabla
+
+- **Son alimentos muestreados en Estados Unidos.** Una variedad colombiana
+  puede diferir: la mazorca de aquí es menos dulce, el aguacate criollo no es el
+  Hass.
+- **La licencia no está verificada.** La página de descargas de USDA no la
+  menciona y el CI no la encontró en otras páginas del sitio
+  (`tablas/usda/LICENCIA.md`). Antes de publicar la app en una tienda hay que
+  confirmarla en fdc.nal.usda.gov.
+- **La tabla colombiana del ICBF no se usa.** Existe y es la correcta para los
+  8 ingredientes que faltan, pero sus PDF traen el permiso `copy:no`. Ver
+  `tablas/icbf/DECISION.md`.
+
+La nutrición de una **receta** sigue siendo siempre estimada, aunque sus
+ingredientes vengan de la tabla: lo que se suma son ingredientes crudos, y
+cocinar cambia los números (ver A.2).
 
 ## A.2 Cómo se suma una receta
 
@@ -125,16 +169,39 @@ medidos para esta población:
 
 ## B.3 Ajuste por objetivo
 
-| Objetivo | Ajuste |
+La interfaz ofrece dos objetivos, que son los que se pidieron: **mantener el
+peso** y **bajar de peso**. El código conserva otros dos (subir de peso, masa
+muscular) para no perder lo que un perfil guardado ya tuviera; si un perfil los
+tiene, se muestran, y si no, no.
+
+| Objetivo | Ajuste sobre el gasto total |
 |---|---|
-| Mantener el peso | 0 % |
-| Bajar de peso | −15 % |
+| Mantener el peso | 0 |
+| Bajar de peso | −15 %, **con tope de 500 kcal** |
 | Subir de peso | +10 % |
 | Ganar masa muscular | +5 % y más proteína |
 
-Márgenes **moderados y conservadores a propósito**. Un déficit agresivo no es
-algo que una aplicación de presupuesto de mercado deba proponerle a nadie por su
-cuenta.
+Márgenes **moderados y conservadores a propósito**. El tope de 500 kcal es una
+decisión propia de Rinde, no una cifra clínica: con un gasto alto, el 15 % la
+supera, y una app de mercado no debería proponer por su cuenta más que eso.
+
+Bajar de peso **no reduce la meta de proteína**: la proteína se calcula por kilo
+de peso y actividad, no como fracción de la energía. Se come menos, no menos
+proteína.
+
+### A quién Rinde no le aplica un déficit, aunque se pida
+
+En estos casos el objetivo se convierte en *mantener* y la pantalla dice por
+qué:
+
+| Situación | Motivo |
+|---|---|
+| Niños | En crecimiento, comer menos no es bajar de peso |
+| Menores de 18 años | Mismo motivo |
+| Embarazo o lactancia | Las necesidades cambian de una forma que Rinde no estima |
+| Condición médica registrada | La estimación no la tiene en cuenta |
+| IMC por debajo de 18,5 | Umbral de bajo peso de la clasificación de la OMS |
+| Faltan peso, estatura o edad | Sin datos no hay gasto que estimar; se usa la referencia de mantenimiento |
 
 ## B.4 Piso de seguridad
 
@@ -210,12 +277,36 @@ referencia genérica escalada, y se dice que es genérica.
 
 ## B.9 Cómo se usa dentro del planificador
 
-Las metas alimentan **una de las siete señales** de puntuación del planificador
-(`nutrition`, peso 0,09). El planificador intenta que el día quede
-razonablemente equilibrado contra esa meta; **no persigue el número**.
+Las metas entran de dos formas:
 
-El presupuesto, el inventario, la variedad y el tiempo pesan más, porque el
-producto es hacer que la plata alcance, no cuadrar macros.
+1. **Como piso por comida** (`MEAL_MIN_SHARE`): el desayuno, el almuerzo y la
+   cena tienen que aportar un mínimo de la meta del día. Es un límite duro, no
+   una preferencia (D27).
+2. **Como una de las ocho señales de puntuación** (`nutrition`, peso 0,18), que
+   premia acercarse a la meta del día sin perseguir el número exacto.
+
+### B.10 Porciones según cada persona
+
+Por defecto las porciones salen de cuántos adultos y niños hay (D21): dar el
+peso **no** cambia cuánto se cocina. El hogar puede elegir en cambio
+**porciones según cada persona** (`portionBasis: "necesidades"`):
+
+```
+raciones por comida = Σ (meta de energía de cada adulto con perfil ÷ 2.000)
+                    + 1 por cada adulto sin perfil
+                    + 0,7 por cada niño
+```
+
+Quien necesita 1.400 kcal come 0,7 de una ración de referencia; quien necesita
+2.600, 1,3. A los niños nunca se les aplica la ecuación de adultos.
+
+Con porciones reducidas, **el gasto objetivo del plan baja en la misma
+proporción**. Sin eso el planificador, que apunta a usar el presupuesto, gastaba
+en platos más caros lo que se dejaba de comer, y medido se comía el 70 % del
+ahorro (D34).
+
+**El aviso de presupuesto excedido nunca propone bajar de peso.** Es una
+decisión de salud de cada persona, no una palanca para cuadrar las cuentas.
 
 ---
 

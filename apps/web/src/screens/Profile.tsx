@@ -223,11 +223,11 @@ export function Profile(): React.JSX.Element {
           <Link to="/estado-fisico" className="tarjeta-boton">
             <span aria-hidden="true" style={{ fontSize: 20 }}>🧍</span>
             <span className="crecer">
-              <strong>Estado físico y necesidades</strong>
+              <strong>Mantener o bajar de peso</strong>
               <div className="pequeno tenue">
-                {(household.nutritionProfiles?.length ?? 0) > 0
-                  ? `${household.nutritionProfiles!.length} perfil(es) · ${needs.kcal.toLocaleString("es-CO")} kcal al día`
-                  : "Opcional. Sin esto se usa una referencia genérica."}
+                {household.portionBasis === "necesidades" && (household.nutritionProfiles?.length ?? 0) > 0
+                  ? `Porciones según cada persona · ${needs.kcal.toLocaleString("es-CO")} kcal al día para el hogar`
+                  : "Porciones estándar. Opcional: ajústalas a cada persona con su peso, estatura y edad."}
               </div>
             </span>
             <span className="tenue" aria-hidden="true">›</span>

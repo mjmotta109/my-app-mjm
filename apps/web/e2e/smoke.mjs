@@ -294,6 +294,37 @@ await step("estado físico estima necesidades y advierte que es opcional", async
   await shot("23-estado-fisico");
 });
 
+await step("bajar de peso: con porciones según cada persona, el mes cuesta menos", async () => {
+  // Dar los datos no cambia la compra por sí solo (D21): hay que elegirlo.
+  await page.getByRole("button", { name: /Según cada persona/ }).click();
+  await page.getByRole("button", { name: "Bajar de peso", exact: true }).click();
+  await page.getByText("Lo que cambia en tu mes").waitFor({ timeout: 10000 });
+  const texto = await page.locator(".contenido").innerText();
+  // Un adulto con perfil que baja de peso y otro sin perfil (porción estándar).
+  if (!/−\$[\d.]+ frente a porciones estándar/.test(texto)) {
+    throw new Error("no muestra el ahorro frente a porciones estándar");
+  }
+  if (!/Bajar de peso · \d/.test(texto)) throw new Error("la persona no muestra su objetivo aplicado");
+  await page.getByText("¿Cuánto se cocina?").scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollBy(0, -80));
+  await shot("23b-bajar-de-peso");
+});
+
+await step("bajar de peso NO se aplica en embarazo, y lo dice", async () => {
+  await page.getByRole("button", { name: "Embarazo", exact: true }).click();
+  await page.getByText(/Durante el embarazo o la lactancia Rinde no aplica déficit/).first().waitFor();
+  const texto = await page.locator(".contenido").innerText();
+  if (!/Mantener el peso · \d/.test(texto)) throw new Error("siguió aplicando el déficit en embarazo");
+  await page.getByRole("button", { name: "Embarazo", exact: true }).click();
+  await shot("23c-embarazo-sin-deficit");
+});
+
+await step("el inicio dice que las porciones están ajustadas", async () => {
+  await page.goto(`${BASE}/#/`);
+  await page.getByText(/Porciones ajustadas a cada persona/).waitFor();
+  await shot("23d-inicio-porciones");
+});
+
 await step("rinde más", async () => {
   await page.goto(`${BASE}/#/rinde-mas`);
   await page.getByRole("heading", { name: "Rinde más" }).waitFor();
