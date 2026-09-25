@@ -1,4 +1,0 @@
-== https://www.icbf.gov.co/ -> 200
-== https://www.icbf.gov.co/nutricion -> 200
-== https://www.icbf.gov.co/bienestar/nutricion -> 200
-href="/bienestar/nutricion/tabla-alimentos" title="clic para consultar Tabla">Tabla de Composición de Alimentos Colombiana
