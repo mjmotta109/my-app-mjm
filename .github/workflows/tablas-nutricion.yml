@@ -147,6 +147,7 @@ jobs:
       - name: Tabla colombiana del ICBF — explorar y bajar solo lo que se ofrece como descarga
         continue-on-error: true
         run: |
+          sudo apt-get install -y -qq poppler-utils >/dev/null
           # La exploración anterior encontró en icbf.gov.co un enlace a
           # "Tabla de Composición de Alimentos Colombiana". Aquí se registra
           # qué hay en esa página y se bajan ÚNICAMENTE los archivos que la
@@ -184,21 +185,40 @@ jobs:
             echo "## Archivos descargables encontrados"
             echo
           } > "$SALIDA"
-          grep -oiE 'href="[^"]+\.(pdf|xlsx?|csv|zip)"' work/icbf_tabla.html | sed -E 's/^href="//I; s/"$//' | sort -u > work/icbf_archivos.txt || true
+          # Solo archivos cuyo nombre es de la tabla o del estudio de composición.
+          # La primera versión bajaba todos los PDF de la página y se trajo las
+          # políticas de privacidad del pie de página.
+          grep -oiE 'href="[^"]+\.(pdf|xlsx?|csv|zip)"' work/icbf_tabla.html | sed -E 's/^href="//I; s/"$//' \
+            | grep -iE 'tcac|composici' | sort -u > work/icbf_archivos.txt || true
           if [ ! -s work/icbf_archivos.txt ]; then echo "(ninguno)" >> "$SALIDA"; fi
           while read -r rel; do
             case "$rel" in http*) url="$rel";; /*) url="$BASE$rel";; *) url="$BASE/$rel";; esac
             nombre=$(basename "${url%%\?*}")
-            if curl -sSL --fail -A "rinde-tablas/1.0" -o "packages/data/tablas/icbf/$nombre" "$url"; then
-              sha=$(sha256sum "packages/data/tablas/icbf/$nombre" | cut -d' ' -f1)
-              bytes=$(stat -c %s "packages/data/tablas/icbf/$nombre")
-              # Los archivos grandes no se guardan en el repo: solo su huella.
-              if [ "$bytes" -gt 15000000 ]; then rm "packages/data/tablas/icbf/$nombre"; nota=" (no se guardó: pesa más de 15 MB)"; else nota=""; fi
+            if curl -sSL --fail -A "rinde-tablas/1.0" -o "work/$nombre" "$url"; then
+              sha=$(sha256sum "work/$nombre" | cut -d' ' -f1)
+              bytes=$(stat -c %s "work/$nombre")
+              nota=""
+              # El PDF no se guarda en el repo (pesa 16 MB): se guarda su texto
+              # con la maquetación conservada, para poder leer las filas de la
+              # tabla y citarlas. La huella permite verificar contra el original.
+              case "$nombre" in
+                *.pdf|*.PDF)
+                  txt="packages/data/tablas/icbf/${nombre%.*}.txt"
+                  if pdftotext -layout "work/$nombre" "$txt"; then
+                    nota=" → texto en \`$(basename "$txt")\` ($(wc -l < "$txt") líneas)"
+                    pdfinfo "work/$nombre" | sed 's/^/    /' >> "$SALIDA.info" || true
+                  fi ;;
+                *) cp "work/$nombre" "packages/data/tablas/icbf/$nombre" ;;
+              esac
               echo "- \`$nombre\` — $url — SHA-256 \`$sha\` — $bytes bytes$nota" >> "$SALIDA"
             else
               echo "- $url — no se pudo descargar" >> "$SALIDA"
             fi
           done < work/icbf_archivos.txt
+          if [ -f "$SALIDA.info" ]; then
+            { echo; echo "## Metadatos de los PDF (pdfinfo)"; echo; echo '```'; cat "$SALIDA.info"; echo '```'; } >> "$SALIDA"
+            rm "$SALIDA.info"
+          fi
           cat "$SALIDA"
           rm -f packages/data/tablas/icbf_exploracion.txt
 
