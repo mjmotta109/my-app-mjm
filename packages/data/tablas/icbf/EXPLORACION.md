@@ -1,7 +1,7 @@
 # Exploración de la tabla colombiana (ICBF)
 
 - Página: https://www.icbf.gov.co/bienestar/nutricion/tabla-alimentos → HTTP 200
-- Fecha: 2026-09-25T01:07Z
+- Fecha: 2026-09-25T01:10Z
 
 ## Título y texto visible (recortado)
 
@@ -222,10 +222,67 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
 
 ## Archivos descargables encontrados
 
-- `13246_-_establece_politica_editorial_y_de_actualizacion_de_contenidos_we.pdf` — https://www.icbf.gov.co/sites/default/files/13246_-_establece_politica_editorial_y_de_actualizacion_de_contenidos_we.pdf — SHA-256 `3752f9064f625500e4f57e03bc85226b92cd56568589aa61a39ccdf4981f1224` — 6998822 bytes
-- `politica_de_tratamiento_de_datos_personales_0.pdf` — https://www.icbf.gov.co/sites/default/files/politica_de_tratamiento_de_datos_personales_0.pdf — SHA-256 `1cbf70ec059a4baa978f30971a4980b23e0636fe547617c9d15c111d25877d9e` — 450823 bytes
-- `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf` — https://www.icbf.gov.co/system/files/caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf — SHA-256 `4981c88b0f031f55dd1313cd4a03668c0caabfb453940ea8f14f20320e70769c` — 2187246 bytes
-- `pt3.rc_protocolo_general_de_servicio_y_atencion_al_ciudadano_v2.pdf` — https://www.icbf.gov.co/system/files/procesos/pt3.rc_protocolo_general_de_servicio_y_atencion_al_ciudadano_v2.pdf — SHA-256 `29ae6ece8d45096b25f1f0607e75f391100fb59f6467f87fef7169a5c0ba27f3` — 430298 bytes
-- `tcac_2015_final_para_imprimir.pdf` — https://www.icbf.gov.co/system/files/tcac_2015_final_para_imprimir.pdf — SHA-256 `5ba1e8088539f5d293d24843dbb4acc3de83a87feb26ab06a621dab98c974ad4` — 15793040 bytes (no se guardó: pesa más de 15 MB)
-- `tcac_web.pdf` — https://www.icbf.gov.co/system/files/tcac_web.pdf — SHA-256 `5766af74c750ca8b30b88196b71660f9568a0b4b37898c66aa84e857d21c5c96` — 16769846 bytes (no se guardó: pesa más de 15 MB)
-- `3248_-_adopta_politica_de_seguridad_y_privacidad_de_la_informacion_ciberseguridad.pdf` — https://www.icbf.gov.co/sites/default/files/3248_-_adopta_politica_de_seguridad_y_privacidad_de_la_informacion_ciberseguridad.pdf — SHA-256 `0c615f8f51fcaf4c69860bcb36766aaccac8bb72de5f24ffaf53c322d81788f9` — 2165741 bytes
+- `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf` — https://www.icbf.gov.co/system/files/caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf — SHA-256 `4981c88b0f031f55dd1313cd4a03668c0caabfb453940ea8f14f20320e70769c` — 2187246 bytes → texto en `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.txt` (1663 líneas)
+- `tcac_2015_final_para_imprimir.pdf` — https://www.icbf.gov.co/system/files/tcac_2015_final_para_imprimir.pdf — SHA-256 `5ba1e8088539f5d293d24843dbb4acc3de83a87feb26ab06a621dab98c974ad4` — 15793040 bytes → texto en `tcac_2015_final_para_imprimir.txt` (22996 líneas)
+- `tcac_web.pdf` — https://www.icbf.gov.co/system/files/tcac_web.pdf — SHA-256 `5766af74c750ca8b30b88196b71660f9568a0b4b37898c66aa84e857d21c5c96` — 16769846 bytes → texto en `tcac_web.txt` (0 líneas)
+
+## Metadatos de los PDF (pdfinfo)
+
+```
+    Title:           CARACTERIZACIÓN Y COMPOSICIÓN NUTRICIONAL DE 18 PREPARACIONES TRADICIONALES EN LA POBLACIÓN COLOMBIANA
+    Author:          ICBF - NUTRICIÓN
+    Creator:         Adobe Acrobat Pro DC 18.9.20050
+    Producer:        ilovepdf.com
+    CreationDate:    Mon Mar  5 18:25:39 2018 UTC
+    ModDate:         Mon Mar  5 21:44:50 2018 UTC
+    Custom Metadata: no
+    Metadata Stream: yes
+    Tagged:          no
+    UserProperties:  no
+    Suspects:        no
+    Form:            none
+    JavaScript:      no
+    Pages:           57
+    Encrypted:       yes (print:no copy:no change:no addNotes:no algorithm:AES)
+    Page size:       626.09 x 623.622 pts
+    Page rot:        0
+    File size:       2187246 bytes
+    Optimized:       yes
+    PDF version:     1.6
+    Producer:        3-Heights(TM) PDF Merge Split Shell 4.6.26.5 (http://www.pdf-tools.com)
+    CreationDate:    Fri Feb 10 21:21:25 2017 UTC
+    ModDate:         Fri Feb 10 21:22:56 2017 UTC
+    Custom Metadata: no
+    Metadata Stream: yes
+    Tagged:          no
+    UserProperties:  no
+    Suspects:        no
+    Form:            none
+    JavaScript:      no
+    Pages:           321
+    Encrypted:       yes (print:yes copy:no change:no addNotes:yes algorithm:AES)
+    Page size:       1338.24 x 652.32 pts
+    Page rot:        0
+    File size:       15793040 bytes
+    Optimized:       yes
+    PDF version:     1.7
+    Title:           
+    Creator:         Adobe Acrobat 19.8
+    Producer:        Adobe Acrobat 19.8 Image Conversion Plug-in
+    CreationDate:    Thu Jul 11 17:01:56 2019 UTC
+    ModDate:         Thu Jul 11 17:05:29 2019 UTC
+    Custom Metadata: no
+    Metadata Stream: yes
+    Tagged:          no
+    UserProperties:  no
+    Suspects:        no
+    Form:            none
+    JavaScript:      no
+    Pages:           147
+    Encrypted:       yes (print:yes copy:no change:no addNotes:no algorithm:AES)
+    Page size:       634.96 x 623.622 pts
+    Page rot:        0
+    File size:       16769846 bytes
+    Optimized:       no
+    PDF version:     1.6
+```
