@@ -1,7 +1,7 @@
 # Exploración de la tabla colombiana (ICBF)
 
 - Página: https://www.icbf.gov.co/bienestar/nutricion/tabla-alimentos → HTTP 200
-- Fecha: 2026-09-25T01:10Z
+- Fecha: 2026-09-25T01:14Z
 
 ## Título y texto visible (recortado)
 
@@ -222,13 +222,14 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
 
 ## Archivos descargables encontrados
 
-- `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf` — https://www.icbf.gov.co/system/files/caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf — SHA-256 `4981c88b0f031f55dd1313cd4a03668c0caabfb453940ea8f14f20320e70769c` — 2187246 bytes → texto en `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.txt` (1663 líneas)
-- `tcac_2015_final_para_imprimir.pdf` — https://www.icbf.gov.co/system/files/tcac_2015_final_para_imprimir.pdf — SHA-256 `5ba1e8088539f5d293d24843dbb4acc3de83a87feb26ab06a621dab98c974ad4` — 15793040 bytes → texto en `tcac_2015_final_para_imprimir.txt` (22996 líneas)
-- `tcac_web.pdf` — https://www.icbf.gov.co/system/files/tcac_web.pdf — SHA-256 `5766af74c750ca8b30b88196b71660f9568a0b4b37898c66aa84e857d21c5c96` — 16769846 bytes → texto en `tcac_web.txt` (0 líneas)
+- `caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf` — https://www.icbf.gov.co/system/files/caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf — SHA-256 `4981c88b0f031f55dd1313cd4a03668c0caabfb453940ea8f14f20320e70769c` — 2187246 bytes → **el PDF prohíbe copiar su contenido (copy:no): no se extrajo nada**
+- `tcac_2015_final_para_imprimir.pdf` — https://www.icbf.gov.co/system/files/tcac_2015_final_para_imprimir.pdf — SHA-256 `5ba1e8088539f5d293d24843dbb4acc3de83a87feb26ab06a621dab98c974ad4` — 15793040 bytes → **el PDF prohíbe copiar su contenido (copy:no): no se extrajo nada**
+- `tcac_web.pdf` — https://www.icbf.gov.co/system/files/tcac_web.pdf — SHA-256 `5766af74c750ca8b30b88196b71660f9568a0b4b37898c66aa84e857d21c5c96` — 16769846 bytes → **el PDF prohíbe copiar su contenido (copy:no): no se extrajo nada**
 
 ## Metadatos de los PDF (pdfinfo)
 
 ```
+  caracterizacion-composicion-18-preparaciones-tradicionales-icbf1_0.pdf:
     Title:           CARACTERIZACIÓN Y COMPOSICIÓN NUTRICIONAL DE 18 PREPARACIONES TRADICIONALES EN LA POBLACIÓN COLOMBIANA
     Author:          ICBF - NUTRICIÓN
     Creator:         Adobe Acrobat Pro DC 18.9.20050
@@ -249,6 +250,7 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
     File size:       2187246 bytes
     Optimized:       yes
     PDF version:     1.6
+  tcac_2015_final_para_imprimir.pdf:
     Producer:        3-Heights(TM) PDF Merge Split Shell 4.6.26.5 (http://www.pdf-tools.com)
     CreationDate:    Fri Feb 10 21:21:25 2017 UTC
     ModDate:         Fri Feb 10 21:22:56 2017 UTC
@@ -266,6 +268,7 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
     File size:       15793040 bytes
     Optimized:       yes
     PDF version:     1.7
+  tcac_web.pdf:
     Title:           
     Creator:         Adobe Acrobat 19.8
     Producer:        Adobe Acrobat 19.8 Image Conversion Plug-in
@@ -286,19 +289,3 @@ Tabla de Composición de Alimentos Colombianos | Portal ICBF - Instituto Colombi
     Optimized:       no
     PDF version:     1.6
 ```
-
----
-
-## Decisión: no se usa ningún valor de estos documentos
-
-Los tres PDF traen el permiso **`copy:no`** (ver los metadatos de arriba): el
-propio documento prohíbe copiar su contenido. `pdftotext` ignora ese permiso y
-una primera corrida extrajo el texto, pero **se borró del repositorio sin
-haberse usado** y el workflow ya no extrae nada de un PDF que lo prohíba.
-
-La regla del proyecto es no asumir que una fuente puede usarse. La TCAC existe,
-es pública para consultar y es la fuente correcta para los ingredientes que
-USDA no trae (papa criolla, panela, arracacha, bocadillo, kumis, queso costeño),
-pero incorporarla a una aplicación requiere un permiso o una versión de datos
-abiertos del ICBF. Hasta entonces esos ingredientes siguen marcados como
-estimados.

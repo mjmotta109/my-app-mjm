@@ -2,9 +2,9 @@
 
 Generado por `.github/workflows/tablas-nutricion.yml`. No editar a mano.
 
-- Descargado: 2026-09-25T01:10Z
+- Descargado: 2026-09-25T01:14Z
 - Página de origen: https://fdc.nal.usda.gov/download-datasets
-- Ejecución: https://github.com/mjmotta109/my-app-mjm/actions/runs/36080829030
+- Ejecución: https://github.com/mjmotta109/my-app-mjm/actions/runs/36081150538
 
 | Conjunto | URL | SHA-256 del .zip | Bytes |
 |---|---|---|---|
